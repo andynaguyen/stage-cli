@@ -5,11 +5,11 @@ import path from "node:path";
 import { type CommentThread, CommentThreadSchema } from "@stagereview/types/comments";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { closeDb, getDb } from "../db/client.js";
-import { ReviewFeedbackSession } from "../review-feedback.js";
+import { formatReviewGitRef, ReviewFeedbackSession } from "../review-feedback.js";
 import { commentRoutes } from "../routes/comments.js";
 import { reviewFeedbackRoutes } from "../routes/review-feedback.js";
 import { insertChaptersFile } from "../runs/import-chapters.js";
-import type { ChaptersFile } from "../schema.js";
+import { type ChaptersFile, SCOPE_KIND, type Scope } from "../schema.js";
 import { LOOPBACK_HOST, type ServerHandle, startServer } from "../server.js";
 import { makeFixture, makeRepoContext } from "./fixtures.js";
 
@@ -26,7 +26,6 @@ beforeEach(async () => {
 	await fs.mkdir(webDist);
 	await fs.writeFile(path.join(webDist, "index.html"), "<html></html>");
 	closeDb();
-	session = new ReviewFeedbackSession("working tree");
 });
 
 afterEach(async () => {
@@ -36,8 +35,9 @@ afterEach(async () => {
 	await fs.rm(tmpDir, { recursive: true, force: true });
 });
 
-async function start(runId: string): Promise<number> {
+async function start(runId: string, scope: Scope = makeFixture().scope): Promise<number> {
 	const db = getDb({ dbPath });
+	session = new ReviewFeedbackSession(scope);
 	handle = await startServer({
 		webDistPath: webDist,
 		routes: [...commentRoutes(db), ...reviewFeedbackRoutes(db, runId, session)],
@@ -132,7 +132,7 @@ describe("review feedback API", () => {
 		expect(first).toEqual({ status: 200, body: { threadCount: 1, commentCount: 2 } });
 		const result = await session.result;
 		expect(result).toMatchObject({
-			gitRef: "working tree",
+			gitRef: formatReviewGitRef(makeFixture().scope),
 			approved: false,
 			annotations: [
 				{ type: "comment", side: "new", text: "Submit me" },
@@ -147,23 +147,21 @@ describe("review feedback API", () => {
 	});
 
 	it("submits only the run bound to the active review session", async () => {
-		const inactiveRunId = seedRun({
-			scope: {
-				kind: "committed",
-				baseSha: "1".repeat(40),
-				headSha: "2".repeat(40),
-				mergeBaseSha: "1".repeat(40),
-			},
-		});
-		const activeRunId = seedRun({
-			scope: {
-				kind: "committed",
-				baseSha: "3".repeat(40),
-				headSha: "4".repeat(40),
-				mergeBaseSha: "3".repeat(40),
-			},
-		});
-		const port = await start(activeRunId);
+		const inactiveScope: Scope = {
+			kind: SCOPE_KIND.COMMITTED,
+			baseSha: "1".repeat(40),
+			headSha: "2".repeat(40),
+			mergeBaseSha: "1".repeat(40),
+		};
+		const activeScope: Scope = {
+			kind: SCOPE_KIND.COMMITTED,
+			baseSha: "3".repeat(40),
+			headSha: "4".repeat(40),
+			mergeBaseSha: "3".repeat(40),
+		};
+		const inactiveRunId = seedRun({ scope: inactiveScope });
+		const activeRunId = seedRun({ scope: activeScope });
+		const port = await start(activeRunId, activeScope);
 		await createThread(port, inactiveRunId, "Do not submit");
 		await createThread(port, activeRunId, "Submit active review");
 

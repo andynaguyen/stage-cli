@@ -26,13 +26,13 @@ export class ReviewSessionConflictError extends Error {
 
 export class ReviewFeedbackSession {
 	readonly result: Promise<ReviewFeedbackExport>;
-	readonly gitRef: string;
+	readonly scope: Scope;
 
 	private state: CompletionState = COMPLETION_STATE.PENDING;
 	private readonly resolveResult: (result: ReviewFeedbackExport) => void;
 
-	constructor(gitRef: string) {
-		this.gitRef = gitRef;
+	constructor(scope: Scope) {
+		this.scope = scope;
 		let resolveResult: ((result: ReviewFeedbackExport) => void) | undefined;
 		this.result = new Promise<ReviewFeedbackExport>((resolve) => {
 			resolveResult = resolve;
@@ -61,9 +61,9 @@ export class ReviewFeedbackSession {
 	}
 }
 
-export function buildEmptyReviewFeedbackExport(gitRef: string): ReviewFeedbackExport {
+export function buildEmptyReviewFeedbackExport(scope: Scope): ReviewFeedbackExport {
 	return {
-		gitRef,
+		gitRef: formatReviewGitRef(scope),
 		approved: false,
 		feedback: "",
 		annotations: [],
@@ -71,14 +71,14 @@ export function buildEmptyReviewFeedbackExport(gitRef: string): ReviewFeedbackEx
 }
 
 export function buildReviewFeedbackExport(
-	gitRef: string,
+	scope: Scope,
 	threads: readonly CommentThread[],
 ): ReviewFeedbackExport {
 	const unresolved = prepareThreads(threads);
 	return {
-		gitRef,
+		gitRef: formatReviewGitRef(scope),
 		approved: false,
-		feedback: formatReviewFeedback(gitRef, unresolved),
+		feedback: formatReviewFeedback(scope, unresolved),
 		annotations: formatAnnotations(unresolved),
 	};
 }
@@ -115,7 +115,7 @@ function prepareThreads(threads: readonly CommentThread[]): CommentThread[] {
 	return [...unresolved].sort(compareThreads);
 }
 
-function formatReviewFeedback(gitRef: string, threads: readonly CommentThread[]): string {
+function formatReviewFeedback(scope: Scope, threads: readonly CommentThread[]): string {
 	const byFile = new Map<string, CommentThread[]>();
 	for (const thread of threads) {
 		const fileThreads = byFile.get(thread.filePath);
@@ -128,7 +128,7 @@ function formatReviewFeedback(gitRef: string, threads: readonly CommentThread[])
 		sections.push([`## ${filePath}`, ...fileThreads.map(formatThread)].join("\n\n"));
 	}
 
-	return `${CODE_REVIEW_FEEDBACK_HEADER}\n\n**Diff:** ${formatDiffLabel(gitRef)}\n\n${sections.join("\n\n")}\n`;
+	return `${CODE_REVIEW_FEEDBACK_HEADER}\n\n**Diff:** ${formatDiffLabel(scope)}\n\n${sections.join("\n\n")}\n`;
 }
 
 function compareThreads(left: CommentThread, right: CommentThread): number {
@@ -191,15 +191,17 @@ function formatSide(side: CommentThread["side"]): ReviewFeedbackAnnotation["side
 	}
 }
 
-function formatDiffLabel(gitRef: string): string {
-	switch (gitRef) {
-		case "working tree":
+function formatDiffLabel(scope: Scope): string {
+	if (scope.kind === SCOPE_KIND.COMMITTED) {
+		return `\`${formatReviewGitRef(scope)}\``;
+	}
+
+	switch (scope.ref) {
+		case WORKING_TREE_REF.WORK:
 			return "Uncommitted changes";
-		case "--staged":
+		case WORKING_TREE_REF.STAGED:
 			return "Staged changes";
-		case "unstaged":
+		case WORKING_TREE_REF.UNSTAGED:
 			return "Unstaged changes";
-		default:
-			return `\`${gitRef}\``;
 	}
 }

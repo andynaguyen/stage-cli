@@ -6,11 +6,20 @@ import {
 	formatReviewGitRef,
 	serializeReviewFeedback,
 } from "../review-feedback.js";
+import { SCOPE_KIND, type Scope, WORKING_TREE_REF } from "../schema.js";
 
 const SHA = {
 	BASE: "1".repeat(40),
 	HEAD: "2".repeat(40),
 } as const;
+
+const WORKING_TREE_SCOPE: Scope = {
+	kind: SCOPE_KIND.WORKING_TREE,
+	ref: WORKING_TREE_REF.WORK,
+	baseSha: SHA.BASE,
+	headSha: SHA.HEAD,
+	mergeBaseSha: SHA.BASE,
+};
 
 function makeComment(over: Partial<Comment> = {}): Comment {
 	return {
@@ -40,7 +49,7 @@ function makeThread(over: Partial<CommentThread> = {}): CommentThread {
 
 describe("buildReviewFeedbackExport", () => {
 	it("emits an empty but structurally consistent exit result", () => {
-		expect(buildEmptyReviewFeedbackExport("working tree")).toEqual({
+		expect(buildEmptyReviewFeedbackExport(WORKING_TREE_SCOPE)).toEqual({
 			gitRef: "working tree",
 			approved: false,
 			feedback: "",
@@ -49,7 +58,7 @@ describe("buildReviewFeedbackExport", () => {
 	});
 
 	it("emits the Stage/Codex review handoff with raw annotations", () => {
-		const result = buildReviewFeedbackExport("working tree", [
+		const result = buildReviewFeedbackExport(WORKING_TREE_SCOPE, [
 			makeThread({
 				id: "deletion",
 				filePath: "src/zeta.ts",
@@ -181,11 +190,11 @@ First
 	});
 
 	it("fails loudly when there is no usable feedback", () => {
-		expect(() => buildReviewFeedbackExport("working tree", [])).toThrow(
+		expect(() => buildReviewFeedbackExport(WORKING_TREE_SCOPE, [])).toThrow(
 			"empty Stage review feedback",
 		);
-		expect(() => buildReviewFeedbackExport("working tree", [makeThread({ comments: [] })])).toThrow(
-			"has no comments",
-		);
+		expect(() =>
+			buildReviewFeedbackExport(WORKING_TREE_SCOPE, [makeThread({ comments: [] })]),
+		).toThrow("has no comments");
 	});
 });

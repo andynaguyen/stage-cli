@@ -42,7 +42,7 @@ export function reviewFeedbackRoutes(
 					threadCount: threads.length,
 					commentCount: threads.reduce((count, thread) => count + thread.comments.length, 0),
 				};
-				const feedback = buildReviewFeedbackExport(session.gitRef, threads);
+				const feedback = buildReviewFeedbackExport(session.scope, threads);
 
 				await completeReviewSession(res, session, feedback, response);
 			},

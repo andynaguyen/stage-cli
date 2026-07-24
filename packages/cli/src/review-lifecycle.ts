@@ -56,7 +56,7 @@ function waitForReviewResult(
 			signals.removeListener("SIGTERM", onSignal);
 			resolve(result);
 		};
-		const onSignal = () => finish(buildEmptyReviewFeedbackExport(session.gitRef));
+		const onSignal = () => finish(buildEmptyReviewFeedbackExport(session.scope));
 
 		signals.once("SIGINT", onSignal);
 		signals.once("SIGTERM", onSignal);

@@ -3,6 +3,15 @@ import type { ReviewFeedbackExport } from "@stagereview/types/review-feedback";
 import { describe, expect, it, vi } from "vitest";
 import { buildEmptyReviewFeedbackExport, ReviewFeedbackSession } from "../review-feedback.js";
 import { type ReviewSessionDependencies, runReviewSession } from "../review-lifecycle.js";
+import { SCOPE_KIND, type Scope, WORKING_TREE_REF } from "../schema.js";
+
+const WORKING_TREE_SCOPE: Scope = {
+	kind: SCOPE_KIND.WORKING_TREE,
+	ref: WORKING_TREE_REF.WORK,
+	baseSha: "1".repeat(40),
+	headSha: "2".repeat(40),
+	mergeBaseSha: "1".repeat(40),
+};
 
 function makeResult(): ReviewFeedbackExport {
 	return {
@@ -44,7 +53,7 @@ function makeDependencies(over: Partial<ReviewSessionDependencies> = {}): {
 
 describe("runReviewSession", () => {
 	it("closes resources and writes feedback when submission wins", async () => {
-		const session = new ReviewFeedbackSession("working tree");
+		const session = new ReviewFeedbackSession(WORKING_TREE_SCOPE);
 		const { dependencies, events, signals } = makeDependencies();
 		const running = runReviewSession(session, dependencies);
 		await Promise.resolve();
@@ -64,7 +73,7 @@ describe("runReviewSession", () => {
 	});
 
 	it("cleans up and writes an empty result when a signal wins", async () => {
-		const session = new ReviewFeedbackSession("working tree");
+		const session = new ReviewFeedbackSession(WORKING_TREE_SCOPE);
 		const { dependencies, events, signals } = makeDependencies({
 			openBrowser: vi.fn(async () => {
 				throw new Error("browser unavailable");
@@ -78,7 +87,7 @@ describe("runReviewSession", () => {
 		await running;
 
 		expect(dependencies.writeStdout).toHaveBeenCalledWith(
-			`${JSON.stringify(buildEmptyReviewFeedbackExport("working tree"), null, 2)}\n`,
+			`${JSON.stringify(buildEmptyReviewFeedbackExport(WORKING_TREE_SCOPE), null, 2)}\n`,
 		);
 		expect(events).toEqual(["server closed", "database closed", "stdout written"]);
 		expect(signals.listenerCount("SIGINT")).toBe(0);
@@ -86,7 +95,7 @@ describe("runReviewSession", () => {
 	});
 
 	it("closes the database when server shutdown fails", async () => {
-		const session = new ReviewFeedbackSession("working tree");
+		const session = new ReviewFeedbackSession(WORKING_TREE_SCOPE);
 		const { dependencies, events, signals } = makeDependencies({
 			closeServer: vi.fn(async () => {
 				throw new Error("close failed");
