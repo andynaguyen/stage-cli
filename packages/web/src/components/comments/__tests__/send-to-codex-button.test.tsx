@@ -3,12 +3,9 @@
 import type { CommentThread } from "@stagereview/types/comments";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { toast } from "@/components/ui/sonner";
 import { makeWrapper } from "@/lib/__tests__/fixtures";
 import { CommentThreadsProvider } from "@/lib/comment-threads-context";
 import { SendToCodexButton } from "../send-to-codex-button";
-
-vi.mock("@/components/ui/sonner", () => ({ toast: { error: vi.fn(), dismiss: vi.fn() } }));
 
 afterEach(() => {
 	vi.unstubAllGlobals();
@@ -63,6 +60,11 @@ function renderButton(threads: CommentThread[], submit: () => Promise<Response>)
 	);
 }
 
+function postCount(): number {
+	return vi.mocked(fetch).mock.calls.filter(([, init]) => (init?.method ?? "GET") === "POST")
+		.length;
+}
+
 describe("SendToCodexButton", () => {
 	it("disables the action when no unresolved threads exist", async () => {
 		renderButton([makeThread({ resolvedAt: "2026-07-24T11:00:00.000Z" })], async () =>
@@ -75,7 +77,7 @@ describe("SendToCodexButton", () => {
 		expect(button.hasAttribute("disabled")).toBe(true);
 	});
 
-	it("shows the number of unresolved threads", async () => {
+	it("opens a confirmation with the unresolved count without submitting", async () => {
 		renderButton(
 			[
 				makeThread(),
@@ -88,31 +90,53 @@ describe("SendToCodexButton", () => {
 		const button = await screen.findByRole("button", {
 			name: "Send to Codex · 2 unresolved threads",
 		});
-		expect(button.hasAttribute("disabled")).toBe(false);
+
+		fireEvent.click(button);
+
+		expect(await screen.findByText("Send review to Codex")).toBeTruthy();
+		expect(screen.getByText("Pending comments")).toBeTruthy();
+		expect(screen.getByText("2")).toBeTruthy();
+		expect(postCount()).toBe(0);
 	});
 
-	it("prevents repeat submission while sending and after success", async () => {
+	it("cancels without submitting", async () => {
+		renderButton([makeThread()], async () => jsonResponse({ threadCount: 1, commentCount: 1 }));
+		const trigger = await screen.findByRole("button", {
+			name: "Send to Codex · 1 unresolved thread",
+		});
+		fireEvent.click(trigger);
+		await screen.findByText("Send review to Codex");
+
+		fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+		await waitFor(() => expect(screen.queryByText("Send review to Codex")).toBeNull());
+		expect(postCount()).toBe(0);
+	});
+
+	it("prevents repeat confirmation while sending and after success", async () => {
 		let finishSubmission = (_response: Response) => {};
 		const pending = new Promise<Response>((resolve) => {
 			finishSubmission = resolve;
 		});
 		renderButton([makeThread()], () => pending);
-		const button = await screen.findByRole("button", {
+		const trigger = await screen.findByRole("button", {
 			name: "Send to Codex · 1 unresolved thread",
 		});
+		fireEvent.click(trigger);
+		const confirm = await screen.findByRole("button", { name: "Send to Codex" });
 
-		fireEvent.click(button);
-		await waitFor(() => expect(button.textContent).toContain("Sending…"));
-		expect(button.hasAttribute("disabled")).toBe(true);
+		fireEvent.click(confirm);
+		await waitFor(() => expect(confirm.textContent).toContain("Sending…"));
+		expect(confirm.hasAttribute("disabled")).toBe(true);
 
 		finishSubmission(jsonResponse({ threadCount: 1, commentCount: 1 }));
-		await waitFor(() => expect(button.textContent).toContain("Sent — closing Stage"));
-		expect(button.hasAttribute("disabled")).toBe(true);
-		fireEvent.click(button);
-		expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2);
+		await waitFor(() => expect(confirm.textContent).toContain("Sent — closing Stage"));
+		expect(confirm.hasAttribute("disabled")).toBe(true);
+		fireEvent.click(confirm);
+		expect(postCount()).toBe(1);
 	});
 
-	it("shows a recoverable error and allows retry", async () => {
+	it("keeps the confirmation open with a recoverable error and allows retry", async () => {
 		let submissions = 0;
 		renderButton([makeThread()], async () => {
 			submissions += 1;
@@ -120,16 +144,18 @@ describe("SendToCodexButton", () => {
 				? jsonResponse({ error: "failed" }, 500)
 				: jsonResponse({ threadCount: 1, commentCount: 1 });
 		});
-		const button = await screen.findByRole("button", {
+		const trigger = await screen.findByRole("button", {
 			name: "Send to Codex · 1 unresolved thread",
 		});
+		fireEvent.click(trigger);
+		const confirm = await screen.findByRole("button", { name: "Send to Codex" });
 
-		fireEvent.click(button);
-		await waitFor(() => expect(vi.mocked(toast.error)).toHaveBeenCalledTimes(1));
-		expect(button.hasAttribute("disabled")).toBe(false);
+		fireEvent.click(confirm);
+		expect(await screen.findByRole("alert")).toBeTruthy();
+		expect(confirm.hasAttribute("disabled")).toBe(false);
 
-		fireEvent.click(button);
-		await waitFor(() => expect(button.textContent).toContain("Sent — closing Stage"));
+		fireEvent.click(confirm);
+		await waitFor(() => expect(confirm.textContent).toContain("Sent — closing Stage"));
 		expect(submissions).toBe(2);
 	});
 });
