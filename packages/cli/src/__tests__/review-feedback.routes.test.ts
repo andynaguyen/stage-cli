@@ -17,7 +17,6 @@ let tmpDir: string;
 let dbPath: string;
 let webDist: string;
 let handle: ServerHandle | undefined;
-let session: ReviewFeedbackSession;
 
 beforeEach(async () => {
 	tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "stage-cli-feedback-"));
@@ -35,14 +34,17 @@ afterEach(async () => {
 	await fs.rm(tmpDir, { recursive: true, force: true });
 });
 
-async function start(runId: string, scope: Scope = makeFixture().scope): Promise<number> {
+async function start(
+	runId: string,
+	scope: Scope = makeFixture().scope,
+): Promise<{ port: number; session: ReviewFeedbackSession }> {
 	const db = getDb({ dbPath });
-	session = new ReviewFeedbackSession(scope);
+	const session = new ReviewFeedbackSession(scope);
 	handle = await startServer({
 		webDistPath: webDist,
 		routes: [...commentRoutes(db), ...reviewFeedbackRoutes(db, runId, session)],
 	});
-	return handle.port;
+	return { port: handle.port, session };
 }
 
 function seedRun(over: Partial<ChaptersFile> = {}): string {
@@ -105,7 +107,7 @@ async function createThread(port: number, runId: string, body: string): Promise<
 describe("review feedback API", () => {
 	it("enforces same-origin before resolving a run", async () => {
 		const runId = seedRun();
-		const port = await start(runId);
+		const { port } = await start(runId);
 		const headers = {
 			Origin: "http://evil.example",
 		};
@@ -115,14 +117,14 @@ describe("review feedback API", () => {
 
 	it("returns 409 when the active run has no unresolved comments", async () => {
 		const runId = seedRun();
-		const port = await start(runId);
+		const { port } = await start(runId);
 
 		expect((await send(port, "POST", "/api/feedback")).status).toBe(409);
 	});
 
 	it("submits unresolved comments once", async () => {
 		const runId = seedRun();
-		const port = await start(runId);
+		const { port, session } = await start(runId);
 		const open = await createThread(port, runId, "Submit me");
 		await send(port, "POST", `/api/comment-threads/${open.id}/replies`, { body: "Reply" });
 		const resolved = await createThread(port, runId, "Hide me");
@@ -161,7 +163,7 @@ describe("review feedback API", () => {
 		};
 		const inactiveRunId = seedRun({ scope: inactiveScope });
 		const activeRunId = seedRun({ scope: activeScope });
-		const port = await start(activeRunId, activeScope);
+		const { port, session } = await start(activeRunId, activeScope);
 		await createThread(port, inactiveRunId, "Do not submit");
 		await createThread(port, activeRunId, "Submit active review");
 

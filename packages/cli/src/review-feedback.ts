@@ -5,7 +5,13 @@ import {
 	type ReviewFeedbackAnnotation,
 	type ReviewFeedbackExport,
 } from "@stagereview/types/review-feedback";
-import { DIFF_SIDE, SCOPE_KIND, type Scope, WORKING_TREE_REF } from "./schema.js";
+import {
+	DIFF_SIDE,
+	SCOPE_KIND,
+	type Scope,
+	WORKING_TREE_REF,
+	type WorkingTreeRef,
+} from "./schema.js";
 
 const COMPLETION_STATE = {
 	PENDING: "pending",
@@ -15,7 +21,22 @@ const COMPLETION_STATE = {
 
 type CompletionState = (typeof COMPLETION_STATE)[keyof typeof COMPLETION_STATE];
 
-export const CODE_REVIEW_FEEDBACK_HEADER = "# Code Review Feedback";
+const WORKING_TREE_REVIEW_LABEL = {
+	[WORKING_TREE_REF.WORK]: {
+		gitRef: "working tree",
+		diffLabel: "Uncommitted changes",
+	},
+	[WORKING_TREE_REF.STAGED]: {
+		gitRef: "--staged",
+		diffLabel: "Staged changes",
+	},
+	[WORKING_TREE_REF.UNSTAGED]: {
+		gitRef: "unstaged",
+		diffLabel: "Unstaged changes",
+	},
+} as const satisfies Record<WorkingTreeRef, { gitRef: string; diffLabel: string }>;
+
+const CODE_REVIEW_FEEDBACK_HEADER = "# Code Review Feedback";
 
 export class ReviewSessionConflictError extends Error {
 	constructor() {
@@ -87,15 +108,7 @@ export function formatReviewGitRef(scope: Scope): string {
 	if (scope.kind === SCOPE_KIND.COMMITTED) {
 		return `${scope.mergeBaseSha}..${scope.headSha}`;
 	}
-
-	switch (scope.ref) {
-		case WORKING_TREE_REF.WORK:
-			return "working tree";
-		case WORKING_TREE_REF.STAGED:
-			return "--staged";
-		case WORKING_TREE_REF.UNSTAGED:
-			return "unstaged";
-	}
+	return WORKING_TREE_REVIEW_LABEL[scope.ref].gitRef;
 }
 
 export function serializeReviewFeedback(result: ReviewFeedbackExport): string {
@@ -195,13 +208,5 @@ function formatDiffLabel(scope: Scope): string {
 	if (scope.kind === SCOPE_KIND.COMMITTED) {
 		return `\`${formatReviewGitRef(scope)}\``;
 	}
-
-	switch (scope.ref) {
-		case WORKING_TREE_REF.WORK:
-			return "Uncommitted changes";
-		case WORKING_TREE_REF.STAGED:
-			return "Staged changes";
-		case WORKING_TREE_REF.UNSTAGED:
-			return "Unstaged changes";
-	}
+	return WORKING_TREE_REVIEW_LABEL[scope.ref].diffLabel;
 }

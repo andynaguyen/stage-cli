@@ -29,11 +29,10 @@ export function SendToCodexButton() {
 
 	const handleOpenChange = (open: boolean) => {
 		if (submission.isPending) return;
-		if (open) {
-			submission.reset();
-			setAreCommentsOpen(false);
-		}
 		setIsOpen(open);
+		if (!open) return;
+		submission.reset();
+		setAreCommentsOpen(false);
 	};
 
 	const handleSubmit = () => {
