@@ -6,10 +6,13 @@ import { closeDb, getDb } from "./db/client.js";
 import { parseGitDiff } from "./diff-parser.js";
 import { filterFilesForLlm, loadStageIgnore } from "./filter-files.js";
 import { readRepoContext, readRepoRoot } from "./git.js";
+import { ReviewFeedbackSession } from "./review-feedback.js";
+import { runReviewSession } from "./review-lifecycle.js";
 import { commentRoutes } from "./routes/comments.js";
 import { diffRoutes } from "./routes/diff.js";
 import { pullRequestRoutes } from "./routes/pull-request.js";
 import { pullRequestMutationRoutes } from "./routes/pull-request-mutations.js";
+import { reviewFeedbackRoutes } from "./routes/review-feedback.js";
 import { runRoutes } from "./routes/runs.js";
 import { viewStateRoutes } from "./routes/view-state.js";
 import { viewerRoutes } from "./routes/viewer.js";
@@ -28,36 +31,37 @@ import { LOOPBACK_HOST, startServer } from "./server.js";
 
 export async function show(jsonPath: string, options: DiffScopeOptions): Promise<void> {
 	const db = getDb();
-	const { chaptersFile, prNumber } = await buildChaptersFile(jsonPath, options);
-	const { runId } = insertChaptersFile(db, chaptersFile, readRepoContext(), prNumber);
-
-	const handle = await startServer({
-		routes: [
-			...runRoutes(db),
-			...viewStateRoutes(db),
-			...commentRoutes(db),
-			...viewerRoutes(),
-			...diffRoutes(db),
-			...pullRequestRoutes(db),
-			...pullRequestMutationRoutes(db),
-		],
-	});
-	const { port } = handle;
-	const url = `http://${LOOPBACK_HOST}:${port}/runs/${encodeURIComponent(runId)}`;
-
-	process.stdout.write(`Listening on ${url}\n`);
-	process.stdout.write("Press Ctrl+C to exit.\n");
-
 	try {
-		await open(url);
-	} catch {
-		// URL is on stdout — user can navigate manually.
+		const { chaptersFile, prNumber } = await buildChaptersFile(jsonPath, options);
+		const { runId } = insertChaptersFile(db, chaptersFile, readRepoContext(), prNumber);
+		const feedbackSession = new ReviewFeedbackSession();
+		const handle = await startServer({
+			routes: [
+				...runRoutes(db),
+				...viewStateRoutes(db),
+				...commentRoutes(db),
+				...reviewFeedbackRoutes(db, feedbackSession),
+				...viewerRoutes(),
+				...diffRoutes(db),
+				...pullRequestRoutes(db),
+				...pullRequestMutationRoutes(db),
+			],
+		});
+		const url = `http://${LOOPBACK_HOST}:${handle.port}/runs/${encodeURIComponent(runId)}`;
+
+		await runReviewSession(feedbackSession, {
+			url,
+			signals: process,
+			openBrowser: open,
+			closeServer: handle.close,
+			closeDatabase: closeDb,
+			writeStdout: (text) => process.stdout.write(text),
+			writeStderr: (text) => process.stderr.write(text),
+		});
+	} catch (error) {
+		closeDb();
+		throw error;
 	}
-
-	await waitForShutdownSignal();
-
-	await handle.close();
-	closeDb();
 }
 
 interface BuiltChaptersFile {
@@ -269,18 +273,5 @@ function sanitizeLineRefs(
 		});
 
 		return { ...chapter, keyChanges };
-	});
-}
-
-function waitForShutdownSignal(): Promise<void> {
-	return new Promise<void>((resolve) => {
-		const cleanup = () => {
-			process.removeListener("SIGINT", cleanup);
-			process.removeListener("SIGTERM", cleanup);
-			resolve();
-		};
-
-		process.once("SIGINT", cleanup);
-		process.once("SIGTERM", cleanup);
 	});
 }
