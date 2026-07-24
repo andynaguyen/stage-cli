@@ -1,6 +1,8 @@
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { BookOpen, FileText, FoldVertical, Settings2, UnfoldVertical } from "lucide-react";
 import { type CSSProperties, useCallback, useMemo, useRef, useState } from "react";
+import { AskAgentShell } from "@/components/agent/agent-panel";
+import { AskAgentButton } from "@/components/agent/ask-agent-button";
 import { SendToCodexButton } from "@/components/comments/send-to-codex-button";
 import { DiffSettingsForm } from "@/components/diff/diff-settings-form";
 import { PullRequestHeader } from "@/components/pull-request/pull-request-header";
@@ -9,6 +11,7 @@ import { SectionLabel } from "@/components/pull-request/section-label";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { AskAgentProvider } from "@/lib/agent-chat-context";
 import { ChapterProvider } from "@/lib/chapter-context";
 import { CollapseActionsProvider, useCollapseActionsFromNav } from "@/lib/collapse-actions-context";
 import { useFileDiffEntries } from "@/lib/parse-diff";
@@ -238,120 +241,125 @@ export function PullRequestLayout({ runId }: { runId: string }) {
 	if (error) return <ErrorState error={error} />;
 
 	return (
-		<CollapseActionsProvider>
-			<div
-				className={cn(
-					"@container flex flex-col px-6 pt-6 lg:px-8",
-					usesPageScroll ? "flex-1" : "h-[calc(100vh_-_3rem)] overflow-hidden",
-				)}
-			>
-				<div className={cn("mb-4", !usesPageScroll && "shrink-0")}>
-					{isPrLoading ? (
-						<PullRequestHeaderSkeleton />
-					) : pullRequest ? (
-						<PullRequestProvider runId={runId} pullRequest={pullRequest}>
-							<PullRequestHeader
-								pullRequest={pullRequest}
-								mergeInfo={mergeStatusData?.mergeStatus ?? undefined}
-							/>
-						</PullRequestProvider>
-					) : (
-						<header className="space-y-1">
-							<SectionLabel>Run</SectionLabel>
-							<p className="break-all font-mono text-foreground/80 text-xs">
-								{data?.run.id ?? runId}
-							</p>
-						</header>
-					)}
-				</div>
-				<nav
-					ref={navRef}
-					className={cn(
-						"z-20 flex items-center justify-between gap-4 py-2",
-						usesPageScroll
-							? "-mx-6 lg:-mx-8 sticky top-12 mb-6 bg-background px-6 lg:px-8"
-							: "mb-6 shrink-0",
-					)}
-				>
-					<div className="flex shrink-0 items-center gap-1">
-						{tabs.map((tab) => (
-							<TabLink
-								key={tab.id}
-								tab={tab}
-								runId={runId}
-								isActive={tab.id === activeTab}
-								countLabel={
-									tab.id === PR_TAB.CHAPTERS
-										? chapterCountLabel
-										: tab.id === PR_TAB.FILES
-											? fileCountLabel
-											: undefined
-								}
-							/>
-						))}
-					</div>
-					<div className="flex shrink-0 items-center gap-3 text-sm @xl:gap-6">
-						<SendToCodexButton onSelectThread={handleSelectCommentThread} />
-						<CollapseExpandAllButton />
-						<Popover>
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<PopoverTrigger asChild>
-										<Button
-											variant="outline"
-											size="sm"
-											className="h-7 cursor-pointer px-2"
-											aria-label="Display settings"
-										>
-											<Settings2 className="size-3.5" />
-											<span className="ml-1 hidden text-xs @7xl:inline">Display</span>
-										</Button>
-									</PopoverTrigger>
-								</TooltipTrigger>
-								<TooltipContent>Display settings</TooltipContent>
-							</Tooltip>
-							<PopoverContent align="end" className="w-80">
-								<DiffSettingsForm compact />
-							</PopoverContent>
-						</Popover>
-						<div className="hidden items-center gap-3 @5xl:flex">
-							<span className="font-medium text-green-600 dark:text-green-500">
-								+{totalAdditions.toLocaleString()}
-							</span>
-							<span className="font-medium text-red-600 dark:text-red-500">
-								-{totalDeletions.toLocaleString()}
-							</span>
+		<AskAgentProvider runId={runId}>
+			<CollapseActionsProvider>
+				<AskAgentShell>
+					<div
+						className={cn(
+							"@container flex flex-col px-6 pt-6 lg:px-8",
+							usesPageScroll ? "flex-1" : "h-[calc(100vh_-_3rem)] overflow-hidden",
+						)}
+					>
+						<div className={cn("mb-4", !usesPageScroll && "shrink-0")}>
+							{isPrLoading ? (
+								<PullRequestHeaderSkeleton />
+							) : pullRequest ? (
+								<PullRequestProvider runId={runId} pullRequest={pullRequest}>
+									<PullRequestHeader
+										pullRequest={pullRequest}
+										mergeInfo={mergeStatusData?.mergeStatus ?? undefined}
+									/>
+								</PullRequestProvider>
+							) : (
+								<header className="space-y-1">
+									<SectionLabel>Run</SectionLabel>
+									<p className="break-all font-mono text-foreground/80 text-xs">
+										{data?.run.id ?? runId}
+									</p>
+								</header>
+							)}
 						</div>
-					</div>
-				</nav>
-				<ChapterProvider runId={runId}>
-					{usesPageScroll ? (
-						<div
-							style={
-								{
-									"--content-top": `${TOPBAR_PX + navHeight}px`,
-									"--main-height": "100vh",
-								} as CSSProperties
-							}
+						<nav
+							ref={navRef}
+							className={cn(
+								"z-20 flex items-center justify-between gap-4 py-2",
+								usesPageScroll
+									? "-mx-6 lg:-mx-8 sticky top-12 mb-6 bg-background px-6 lg:px-8"
+									: "mb-6 shrink-0",
+							)}
 						>
-							<Outlet />
-						</div>
-					) : (
-						<div
-							ref={contentRef}
-							className="scrollbar-thin min-h-0 flex-1 overflow-y-auto"
-							style={
-								{
-									"--content-top": "0px",
-									"--main-height": `${contentHeight}px`,
-								} as CSSProperties
-							}
-						>
-							<Outlet />
-						</div>
-					)}
-				</ChapterProvider>
-			</div>
-		</CollapseActionsProvider>
+							<div className="flex shrink-0 items-center gap-1">
+								{tabs.map((tab) => (
+									<TabLink
+										key={tab.id}
+										tab={tab}
+										runId={runId}
+										isActive={tab.id === activeTab}
+										countLabel={
+											tab.id === PR_TAB.CHAPTERS
+												? chapterCountLabel
+												: tab.id === PR_TAB.FILES
+													? fileCountLabel
+													: undefined
+										}
+									/>
+								))}
+							</div>
+							<div className="flex shrink-0 items-center gap-3 text-sm @xl:gap-6">
+								<SendToCodexButton onSelectThread={handleSelectCommentThread} />
+								<AskAgentButton />
+								<CollapseExpandAllButton />
+								<Popover>
+									<Tooltip>
+										<TooltipTrigger asChild>
+											<PopoverTrigger asChild>
+												<Button
+													variant="outline"
+													size="sm"
+													className="h-7 cursor-pointer px-2"
+													aria-label="Display settings"
+												>
+													<Settings2 className="size-3.5" />
+													<span className="ml-1 hidden text-xs @7xl:inline">Display</span>
+												</Button>
+											</PopoverTrigger>
+										</TooltipTrigger>
+										<TooltipContent>Display settings</TooltipContent>
+									</Tooltip>
+									<PopoverContent align="end" className="w-80">
+										<DiffSettingsForm compact />
+									</PopoverContent>
+								</Popover>
+								<div className="hidden items-center gap-3 @5xl:flex">
+									<span className="font-medium text-green-600 dark:text-green-500">
+										+{totalAdditions.toLocaleString()}
+									</span>
+									<span className="font-medium text-red-600 dark:text-red-500">
+										-{totalDeletions.toLocaleString()}
+									</span>
+								</div>
+							</div>
+						</nav>
+						<ChapterProvider runId={runId}>
+							{usesPageScroll ? (
+								<div
+									style={
+										{
+											"--content-top": `${TOPBAR_PX + navHeight}px`,
+											"--main-height": "100vh",
+										} as CSSProperties
+									}
+								>
+									<Outlet />
+								</div>
+							) : (
+								<div
+									ref={contentRef}
+									className="scrollbar-thin min-h-0 flex-1 overflow-y-auto"
+									style={
+										{
+											"--content-top": "0px",
+											"--main-height": `${contentHeight}px`,
+										} as CSSProperties
+									}
+								>
+									<Outlet />
+								</div>
+							)}
+						</ChapterProvider>
+					</div>
+				</AskAgentShell>
+			</CollapseActionsProvider>
+		</AskAgentProvider>
 	);
 }
