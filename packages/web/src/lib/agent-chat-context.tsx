@@ -77,6 +77,7 @@ interface AskAgentContextValue {
 	close: () => void;
 	openWithSelection: (selection: AgentSelection) => void;
 	clearSelection: () => void;
+	refreshCapability: () => void;
 	send: (question: string) => Promise<void>;
 	stop: () => void;
 	reset: () => void;
@@ -179,6 +180,7 @@ export function AskAgentProvider({
 	const [pendingPermissions, setPendingPermissions] = useState<AgentPendingPermission[]>([]);
 	const [isStreaming, setIsStreaming] = useState(false);
 	const [focusRequest, setFocusRequest] = useState(0);
+	const capabilityGenerationRef = useRef(0);
 	const sessionIdRef = useRef<string | null>(null);
 	const sessionPromiseRef = useRef<Promise<string> | null>(null);
 	const streamControllerRef = useRef<AbortController | null>(null);
@@ -186,18 +188,19 @@ export function AskAgentProvider({
 	const generationRef = useRef(0);
 	const sessionGenerationRef = useRef(0);
 
-	useEffect(() => {
-		let active = true;
+	const refreshCapability = useCallback(() => {
+		const generation = capabilityGenerationRef.current + 1;
+		capabilityGenerationRef.current = generation;
 		setIsCapabilityLoading(true);
 		void getAgentCapabilities(runId)
 			.then(({ providers }) => {
-				if (!active) return;
+				if (capabilityGenerationRef.current !== generation) return;
 				const providerCapability =
 					providers.find((provider) => provider.providerId === providerId) ?? null;
 				setCapability(providerCapability);
 			})
 			.catch((error: unknown) => {
-				if (!active) return;
+				if (capabilityGenerationRef.current !== generation) return;
 				setCapability({
 					providerId,
 					label: "Local agent",
@@ -206,12 +209,16 @@ export function AskAgentProvider({
 				});
 			})
 			.finally(() => {
-				if (active) setIsCapabilityLoading(false);
+				if (capabilityGenerationRef.current === generation) setIsCapabilityLoading(false);
 			});
-		return () => {
-			active = false;
-		};
 	}, [providerId, runId]);
+
+	useEffect(() => {
+		refreshCapability();
+		return () => {
+			capabilityGenerationRef.current += 1;
+		};
+	}, [refreshCapability]);
 
 	useEffect(
 		() => () => {
@@ -403,6 +410,7 @@ export function AskAgentProvider({
 			close,
 			openWithSelection,
 			clearSelection,
+			refreshCapability,
 			send,
 			stop,
 			reset,
@@ -421,6 +429,7 @@ export function AskAgentProvider({
 			close,
 			openWithSelection,
 			clearSelection,
+			refreshCapability,
 			send,
 			stop,
 			reset,

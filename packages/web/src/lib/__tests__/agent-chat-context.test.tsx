@@ -25,7 +25,7 @@ vi.mock("../agent-api", () => ({
 const SESSION_ID = "123e4567-e89b-12d3-a456-426614174000";
 
 function Harness() {
-	const { capability, messages, openWithSelection, send } = useAskAgent();
+	const { capability, messages, openWithSelection, refreshCapability, send } = useAskAgent();
 	return (
 		<>
 			<span>{capability?.status ?? "loading"}</span>
@@ -54,6 +54,9 @@ function Harness() {
 			</button>
 			<button type="button" onClick={() => void send("Why is this guard here?")}>
 				Ask selection
+			</button>
+			<button type="button" onClick={refreshCapability}>
+				Check again
 			</button>
 			<output data-testid="messages">
 				{JSON.stringify(
@@ -151,5 +154,20 @@ describe("AskAgentProvider", () => {
 			expect.any(Function),
 		]);
 		expect(screen.getByTestId("messages").textContent).toContain("src/auth.ts");
+	});
+
+	it("can retry capability detection after the local setup changes", async () => {
+		vi.mocked(getAgentCapabilities).mockRejectedValueOnce(new Error("Codex is not ready"));
+		render(
+			<AskAgentProvider runId="run-1">
+				<Harness />
+			</AskAgentProvider>,
+		);
+		await screen.findByText(AGENT_CAPABILITY_STATUS.ERROR);
+
+		fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+
+		await screen.findByText(AGENT_CAPABILITY_STATUS.AVAILABLE);
+		expect(getAgentCapabilities).toHaveBeenCalledTimes(2);
 	});
 });

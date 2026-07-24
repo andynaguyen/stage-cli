@@ -52,7 +52,7 @@ function EmptyState() {
 }
 
 function CapabilityState() {
-	const { capability, isCapabilityLoading } = useAskAgent();
+	const { capability, isCapabilityLoading, refreshCapability } = useAskAgent();
 	if (isCapabilityLoading) {
 		return (
 			<div className="flex min-h-full items-center justify-center gap-2 text-muted-foreground text-sm">
@@ -74,17 +74,22 @@ function CapabilityState() {
 				</div>
 				<h2 className="mt-4 font-semibold text-base">{providerLabel} needs attention</h2>
 				<p className="mt-2 text-muted-foreground text-sm">{detail}</p>
-				{capability?.providerId === AGENT_PROVIDER.CODEX &&
-					capability.status === AGENT_CAPABILITY_STATUS.MISSING && (
-						<a
-							href="https://developers.openai.com/codex/cli"
-							target="_blank"
-							rel="noreferrer"
-							className="mt-4 inline-flex text-primary text-sm underline-offset-4 hover:underline"
-						>
-							Install Codex CLI
-						</a>
-					)}
+				<div className="mt-4 flex items-center justify-center gap-3">
+					{capability?.providerId === AGENT_PROVIDER.CODEX &&
+						capability.status === AGENT_CAPABILITY_STATUS.MISSING && (
+							<a
+								href="https://developers.openai.com/codex/cli"
+								target="_blank"
+								rel="noreferrer"
+								className="inline-flex text-primary text-sm underline-offset-4 hover:underline"
+							>
+								Install Codex CLI
+							</a>
+						)}
+					<Button variant="outline" size="sm" className="h-8" onClick={refreshCapability}>
+						Check again
+					</Button>
+				</div>
 			</div>
 		</div>
 	);
