@@ -82,7 +82,6 @@ export class CodexAgentSession implements AgentSession {
 		try {
 			const raw = await client.request("thread/start", {
 				cwd: options.repoRoot,
-				sandbox: "read-only",
 				developerInstructions: options.instructions,
 				ephemeral: true,
 				serviceName: "stage",

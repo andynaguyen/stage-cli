@@ -215,6 +215,12 @@ describe("Codex agent session", () => {
 		});
 
 		expect(process.messagesWithMethod("thread/start")).toHaveLength(1);
+		expect(process.messageWithMethod("thread/start").params).toMatchObject({
+			cwd: "/repo",
+			developerInstructions: "Read only.",
+			ephemeral: true,
+		});
+		expect(process.messageWithMethod("thread/start").params).not.toHaveProperty("sandbox");
 		expect(process.messagesWithMethod("turn/start")).toHaveLength(2);
 		for (const request of process.messagesWithMethod("turn/start")) {
 			expect(request.params).toMatchObject({
