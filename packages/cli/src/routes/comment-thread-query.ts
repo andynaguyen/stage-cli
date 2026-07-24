@@ -1,7 +1,4 @@
-import type {
-	Comment as CommentDto,
-	CommentThread as CommentThreadDto,
-} from "@stagereview/types/comments";
+import type { Comment, CommentThread } from "@stagereview/types/comments";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import type { StageDb } from "../db/client.js";
 import {
@@ -33,17 +30,17 @@ export class CommentThreadQuery {
 		return run === undefined ? null : deriveScopeKey(run);
 	}
 
-	listForRun(runId: string | undefined): CommentThreadDto[] | null {
+	listForRun(runId: string | undefined): CommentThread[] | null {
 		const scopeKey = this.findScopeKeyForRun(runId);
 		return scopeKey === null ? null : this.listForScope(scopeKey, false);
 	}
 
-	listUnresolvedForRun(runId: string | undefined): CommentThreadDto[] | null {
+	listUnresolvedForRun(runId: string | undefined): CommentThread[] | null {
 		const scopeKey = this.findScopeKeyForRun(runId);
 		return scopeKey === null ? null : this.listForScope(scopeKey, true);
 	}
 
-	private listForScope(scopeKey: string, unresolvedOnly: boolean): CommentThreadDto[] {
+	private listForScope(scopeKey: string, unresolvedOnly: boolean): CommentThread[] {
 		const scopePredicate = eq(commentThread.scopeKey, scopeKey);
 		const threads = this.db
 			.select()
@@ -79,15 +76,15 @@ export class CommentThreadQuery {
 			if (rows === undefined) {
 				throw new Error(`Comment thread ${thread.id} has no comments`);
 			}
-			return toThreadDto(thread, rows);
+			return toCommentThread(thread, rows);
 		});
 	}
 }
 
-export function toThreadDto(
+export function toCommentThread(
 	thread: CommentThreadRow,
 	comments: readonly CommentRow[],
-): CommentThreadDto {
+): CommentThread {
 	return {
 		id: thread.id,
 		filePath: thread.filePath,
@@ -97,11 +94,11 @@ export function toThreadDto(
 		resolvedAt: thread.resolvedAt === null ? null : thread.resolvedAt.toISOString(),
 		createdAt: thread.createdAt.toISOString(),
 		updatedAt: thread.updatedAt.toISOString(),
-		comments: comments.map(toCommentDto),
+		comments: comments.map(toComment),
 	};
 }
 
-export function toCommentDto(row: CommentRow): CommentDto {
+export function toComment(row: CommentRow): Comment {
 	return {
 		id: row.id,
 		body: row.body,

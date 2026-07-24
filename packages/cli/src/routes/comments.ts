@@ -8,7 +8,7 @@ import type { StageDb } from "../db/client.js";
 import { LOCAL_USER_ID } from "../db/local-user.js";
 import { type CommentRow, comment, commentThread } from "../db/schema/index.js";
 import type { Route } from "../server.js";
-import { CommentThreadQuery, toCommentDto, toThreadDto } from "./comment-thread-query.js";
+import { CommentThreadQuery, toComment, toCommentThread } from "./comment-thread-query.js";
 import { parseJsonBody, writeJson } from "./json.js";
 import { enforceSameOrigin } from "./pull-request-shared.js";
 
@@ -61,7 +61,7 @@ export function commentRoutes(db: StageDb): Route[] {
 						.returning()
 						.all();
 					if (!commentRow) throw new Error("comment insert returned no row");
-					return toThreadDto(threadRow, [commentRow]);
+					return toCommentThread(threadRow, [commentRow]);
 				});
 				writeJson(res, 201, created);
 			},
@@ -91,7 +91,7 @@ export function commentRoutes(db: StageDb): Route[] {
 						.set({ updatedAt: new Date() })
 						.where(eq(commentThread.id, threadId))
 						.run();
-					return toCommentDto(commentRow);
+					return toComment(commentRow);
 				});
 				writeJson(res, 201, created);
 			},
@@ -119,7 +119,7 @@ export function commentRoutes(db: StageDb): Route[] {
 					writeJson(res, 404, { error: `Thread ${threadId} not found` });
 					return;
 				}
-				writeJson(res, 200, toThreadDto(updated, threadComments(db, threadId)));
+				writeJson(res, 200, toCommentThread(updated, threadComments(db, threadId)));
 			},
 		},
 		{
@@ -161,7 +161,7 @@ export function commentRoutes(db: StageDb): Route[] {
 					writeJson(res, 404, { error: `Comment ${commentId} not found` });
 					return;
 				}
-				writeJson(res, 200, toCommentDto(updated));
+				writeJson(res, 200, toComment(updated));
 			},
 		},
 		{
