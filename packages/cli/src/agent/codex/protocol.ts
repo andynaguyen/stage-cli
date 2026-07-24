@@ -64,10 +64,16 @@ const FileChangeItemSchema = z.object({
 	id: z.string(),
 });
 
+const AgentMessageItemSchema = z.object({
+	type: z.literal("agentMessage"),
+	id: z.string(),
+	phase: z.string(),
+});
+
 export const ItemNotificationSchema = z.object({
 	threadId: z.string(),
 	turnId: z.string(),
-	item: z.union([CommandExecutionItemSchema, FileChangeItemSchema]),
+	item: z.union([CommandExecutionItemSchema, FileChangeItemSchema, AgentMessageItemSchema]),
 });
 
 export const TurnCompletedNotificationSchema = z.object({

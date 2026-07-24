@@ -38,6 +38,7 @@ interface ActiveTurn {
 	interruptSent: boolean;
 	bufferedNotifications: CodexNotification[];
 	bufferedRequests: CodexServerRequest[];
+	agentMessagePhases: Map<string, string>;
 }
 
 function truncate(value: string, maxLength: number): string {
@@ -108,6 +109,7 @@ export class CodexAgentSession implements AgentSession {
 			interruptSent: false,
 			bufferedNotifications: [],
 			bufferedRequests: [],
+			agentMessagePhases: new Map(),
 		};
 		this.active = state;
 		state.startPromise = this.startTurn(state, prompt);
@@ -236,7 +238,8 @@ export class CodexAgentSession implements AgentSession {
 			if (
 				parsed.success &&
 				parsed.data.threadId === this.threadId &&
-				parsed.data.turnId === state.turnId
+				parsed.data.turnId === state.turnId &&
+				state.agentMessagePhases.get(parsed.data.itemId) !== "commentary"
 			) {
 				state.queue.push({ type: "text_delta", text: parsed.data.delta });
 			}
@@ -253,6 +256,12 @@ export class CodexAgentSession implements AgentSession {
 				return;
 			}
 			const { item } = parsed.data;
+			if (item.type === "agentMessage") {
+				if (notification.method === "item/started") {
+					state.agentMessagePhases.set(item.id, item.phase);
+				}
+				return;
+			}
 			if (item.type === "fileChange") {
 				state.queue.push({
 					type: "write_blocked",
