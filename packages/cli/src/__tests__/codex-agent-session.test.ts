@@ -165,7 +165,7 @@ describe("Codex agent session", () => {
 			params: {
 				threadId: "thread-1",
 				turnId: "turn-1",
-				item: { type: "agentMessage", id: "answer-1", phase: "final_answer" },
+				item: { type: "agentMessage", id: "answer-1", phase: null },
 			},
 		});
 		process.emit({

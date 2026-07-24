@@ -67,7 +67,7 @@ const FileChangeItemSchema = z.object({
 const AgentMessageItemSchema = z.object({
 	type: z.literal("agentMessage"),
 	id: z.string(),
-	phase: z.string(),
+	phase: z.enum(["commentary", "final_answer"]).nullable(),
 });
 
 export const ItemNotificationSchema = z.object({

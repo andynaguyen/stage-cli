@@ -38,7 +38,7 @@ interface ActiveTurn {
 	interruptSent: boolean;
 	bufferedNotifications: CodexNotification[];
 	bufferedRequests: CodexServerRequest[];
-	agentMessagePhases: Map<string, string>;
+	agentMessagePhases: Map<string, "commentary" | "final_answer" | null>;
 }
 
 function truncate(value: string, maxLength: number): string {
