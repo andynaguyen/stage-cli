@@ -111,7 +111,6 @@ describe("review feedback API", () => {
 		expect(
 			(await send(port, "POST", "/api/runs/unknown/feedback", undefined, headers)).status,
 		).toBe(403);
-		expect((await send(port, "POST", "/api/exit", undefined, headers)).status).toBe(403);
 	});
 
 	it("returns 404 for an unknown run and 409 for an empty run", async () => {
@@ -120,21 +119,6 @@ describe("review feedback API", () => {
 
 		expect((await send(port, "POST", "/api/runs/unknown/feedback")).status).toBe(404);
 		expect((await send(port, "POST", `/api/runs/${runId}/feedback`)).status).toBe(409);
-	});
-
-	it("closes without feedback using the same output envelope", async () => {
-		const port = await start();
-
-		expect(await send(port, "POST", "/api/exit")).toEqual({
-			status: 200,
-			body: { closed: true },
-		});
-		await expect(session.result).resolves.toEqual({
-			gitRef: "working tree",
-			approved: false,
-			feedback: "",
-			annotations: [],
-		});
 	});
 
 	it("submits unresolved comments once and reports both counts", async () => {

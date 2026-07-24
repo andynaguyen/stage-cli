@@ -1,13 +1,11 @@
 import type { ServerResponse } from "node:http";
 import { finished } from "node:stream/promises";
 import type {
-	ReviewExitResponse,
 	ReviewFeedbackExport,
 	ReviewFeedbackResponse,
 } from "@stagereview/types/review-feedback";
 import type { StageDb } from "../db/client.js";
 import {
-	buildEmptyReviewFeedbackExport,
 	buildReviewFeedbackExport,
 	type ReviewFeedbackSession,
 	ReviewSessionConflictError,
@@ -46,17 +44,6 @@ export function reviewFeedbackRoutes(db: StageDb, session: ReviewFeedbackSession
 				await completeReviewSession(res, session, feedback, response);
 			},
 		},
-		{
-			method: "POST",
-			pattern: "/api/exit",
-			handler: async (req, res) => {
-				if (!enforceSameOrigin(req, res)) return;
-
-				await completeReviewSession(res, session, buildEmptyReviewFeedbackExport(session.gitRef), {
-					closed: true,
-				});
-			},
-		},
 	];
 }
 
@@ -64,7 +51,7 @@ async function completeReviewSession(
 	res: ServerResponse,
 	session: ReviewFeedbackSession,
 	result: ReviewFeedbackExport,
-	response: ReviewFeedbackResponse | ReviewExitResponse,
+	response: ReviewFeedbackResponse,
 ): Promise<void> {
 	try {
 		await session.complete(result, async () => {
