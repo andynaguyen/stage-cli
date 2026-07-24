@@ -1,6 +1,7 @@
 import type { Comment, CommentThread } from "@stagereview/types/comments";
 import { describe, expect, it } from "vitest";
 import {
+	buildEmptyReviewFeedbackExport,
 	buildReviewFeedbackExport,
 	formatReviewGitRef,
 	serializeReviewFeedback,
@@ -38,6 +39,15 @@ function makeThread(over: Partial<CommentThread> = {}): CommentThread {
 }
 
 describe("buildReviewFeedbackExport", () => {
+	it("emits an empty but structurally consistent exit result", () => {
+		expect(buildEmptyReviewFeedbackExport("working tree")).toEqual({
+			gitRef: "working tree",
+			approved: false,
+			feedback: "",
+			annotations: [],
+		});
+	});
+
 	it("emits Plannotator-compatible Markdown and raw annotations", () => {
 		const result = buildReviewFeedbackExport("working tree", [
 			makeThread({

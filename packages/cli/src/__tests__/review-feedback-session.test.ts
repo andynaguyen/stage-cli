@@ -1,6 +1,6 @@
 import type { ReviewFeedbackExport } from "@stagereview/types/review-feedback";
 import { describe, expect, it } from "vitest";
-import { ReviewFeedbackConflictError, ReviewFeedbackSession } from "../review-feedback.js";
+import { ReviewFeedbackSession, ReviewSessionConflictError } from "../review-feedback.js";
 
 function makeResult(feedback: string): ReviewFeedbackExport {
 	return {
@@ -23,16 +23,16 @@ describe("ReviewFeedbackSession", () => {
 			feedbackResolved = true;
 		});
 
-		const submission = session.submit(makeResult("feedback"), () => acknowledgement);
+		const completion = session.complete(makeResult("feedback"), () => acknowledgement);
 		await Promise.resolve();
 
 		expect(feedbackResolved).toBe(false);
-		await expect(session.submit(makeResult("conflict"), async () => {})).rejects.toBeInstanceOf(
-			ReviewFeedbackConflictError,
+		await expect(session.complete(makeResult("conflict"), async () => {})).rejects.toBeInstanceOf(
+			ReviewSessionConflictError,
 		);
 
 		releaseAcknowledgement();
-		await submission;
+		await completion;
 		await expect(session.result).resolves.toEqual(makeResult("feedback"));
 	});
 
@@ -40,12 +40,12 @@ describe("ReviewFeedbackSession", () => {
 		const session = new ReviewFeedbackSession("working tree");
 
 		await expect(
-			session.submit(makeResult("lost"), async () => {
+			session.complete(makeResult("lost"), async () => {
 				throw new Error("response failed");
 			}),
 		).rejects.toThrow("response failed");
 
-		await session.submit(makeResult("retried"), async () => {});
+		await session.complete(makeResult("retried"), async () => {});
 		await expect(session.result).resolves.toEqual(makeResult("retried"));
 	});
 });

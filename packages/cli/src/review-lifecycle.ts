@@ -1,15 +1,10 @@
 import type { EventEmitter } from "node:events";
 import type { ReviewFeedbackExport } from "@stagereview/types/review-feedback";
-import { type ReviewFeedbackSession, serializeReviewFeedback } from "./review-feedback.js";
-
-const REVIEW_OUTCOME = {
-	FEEDBACK: "feedback",
-	SIGNAL: "signal",
-} as const;
-
-type ReviewOutcome =
-	| { kind: typeof REVIEW_OUTCOME.FEEDBACK; result: ReviewFeedbackExport }
-	| { kind: typeof REVIEW_OUTCOME.SIGNAL };
+import {
+	buildEmptyReviewFeedbackExport,
+	type ReviewFeedbackSession,
+	serializeReviewFeedback,
+} from "./review-feedback.js";
 
 export interface ReviewSessionDependencies {
 	url: string;
@@ -34,9 +29,9 @@ export async function runReviewSession(
 		// The listening URL above lets the user open Stage manually.
 	}
 
-	let outcome: ReviewOutcome;
+	let result: ReviewFeedbackExport;
 	try {
-		outcome = await waitForReviewOutcome(session, dependencies.signals);
+		result = await waitForReviewResult(session, dependencies.signals);
 	} finally {
 		try {
 			await dependencies.closeServer();
@@ -45,30 +40,26 @@ export async function runReviewSession(
 		}
 	}
 
-	if (outcome.kind === REVIEW_OUTCOME.FEEDBACK) {
-		dependencies.writeStdout(serializeReviewFeedback(outcome.result));
-	}
+	dependencies.writeStdout(serializeReviewFeedback(result));
 }
 
-function waitForReviewOutcome(
+function waitForReviewResult(
 	session: ReviewFeedbackSession,
 	signals: EventEmitter,
-): Promise<ReviewOutcome> {
+): Promise<ReviewFeedbackExport> {
 	return new Promise((resolve) => {
 		let settled = false;
-		const finish = (outcome: ReviewOutcome) => {
+		const finish = (result: ReviewFeedbackExport) => {
 			if (settled) return;
 			settled = true;
 			signals.removeListener("SIGINT", onSignal);
 			signals.removeListener("SIGTERM", onSignal);
-			resolve(outcome);
+			resolve(result);
 		};
-		const onSignal = () => finish({ kind: REVIEW_OUTCOME.SIGNAL });
+		const onSignal = () => finish(buildEmptyReviewFeedbackExport(session.gitRef));
 
 		signals.once("SIGINT", onSignal);
 		signals.once("SIGTERM", onSignal);
-		void session.result.then((result) => {
-			finish({ kind: REVIEW_OUTCOME.FEEDBACK, result });
-		});
+		void session.result.then(finish);
 	});
 }

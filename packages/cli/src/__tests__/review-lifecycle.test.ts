@@ -1,7 +1,7 @@
 import { EventEmitter } from "node:events";
 import type { ReviewFeedbackExport } from "@stagereview/types/review-feedback";
 import { describe, expect, it, vi } from "vitest";
-import { ReviewFeedbackSession } from "../review-feedback.js";
+import { buildEmptyReviewFeedbackExport, ReviewFeedbackSession } from "../review-feedback.js";
 import { type ReviewSessionDependencies, runReviewSession } from "../review-lifecycle.js";
 
 function makeResult(): ReviewFeedbackExport {
@@ -49,7 +49,7 @@ describe("runReviewSession", () => {
 		const running = runReviewSession(session, dependencies);
 		await Promise.resolve();
 
-		await session.submit(makeResult(), async () => {});
+		await session.complete(makeResult(), async () => {});
 		await running;
 
 		expect(dependencies.writeStderr).toHaveBeenCalledWith(
@@ -63,7 +63,7 @@ describe("runReviewSession", () => {
 		expect(signals.listenerCount("SIGTERM")).toBe(0);
 	});
 
-	it("cleans up without stdout when a signal wins", async () => {
+	it("cleans up and writes an empty result when a signal wins", async () => {
 		const session = new ReviewFeedbackSession("working tree");
 		const { dependencies, events, signals } = makeDependencies({
 			openBrowser: vi.fn(async () => {
@@ -77,8 +77,10 @@ describe("runReviewSession", () => {
 		signals.emit("SIGINT");
 		await running;
 
-		expect(dependencies.writeStdout).not.toHaveBeenCalled();
-		expect(events).toEqual(["server closed", "database closed"]);
+		expect(dependencies.writeStdout).toHaveBeenCalledWith(
+			`${JSON.stringify(buildEmptyReviewFeedbackExport("working tree"), null, 2)}\n`,
+		);
+		expect(events).toEqual(["server closed", "database closed", "stdout written"]);
 		expect(signals.listenerCount("SIGINT")).toBe(0);
 		expect(signals.listenerCount("SIGTERM")).toBe(0);
 	});

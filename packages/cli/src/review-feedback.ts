@@ -7,20 +7,20 @@ import {
 } from "@stagereview/types/review-feedback";
 import { DIFF_SIDE, SCOPE_KIND, type Scope, WORKING_TREE_REF } from "./schema.js";
 
-const SUBMISSION_STATE = {
+const COMPLETION_STATE = {
 	PENDING: "pending",
-	SUBMITTING: "submitting",
-	SUBMITTED: "submitted",
+	COMPLETING: "completing",
+	COMPLETED: "completed",
 } as const;
 
-type SubmissionState = (typeof SUBMISSION_STATE)[keyof typeof SUBMISSION_STATE];
+type CompletionState = (typeof COMPLETION_STATE)[keyof typeof COMPLETION_STATE];
 
 export const CODE_REVIEW_FEEDBACK_HEADER = "# Code Review Feedback";
 
-export class ReviewFeedbackConflictError extends Error {
+export class ReviewSessionConflictError extends Error {
 	constructor() {
-		super("Review feedback has already been submitted");
-		this.name = "ReviewFeedbackConflictError";
+		super("Review session has already completed");
+		this.name = "ReviewSessionConflictError";
 	}
 }
 
@@ -28,7 +28,7 @@ export class ReviewFeedbackSession {
 	readonly result: Promise<ReviewFeedbackExport>;
 	readonly gitRef: string;
 
-	private state: SubmissionState = SUBMISSION_STATE.PENDING;
+	private state: CompletionState = COMPLETION_STATE.PENDING;
 	private readonly resolveResult: (result: ReviewFeedbackExport) => void;
 
 	constructor(gitRef: string) {
@@ -43,22 +43,31 @@ export class ReviewFeedbackSession {
 		this.resolveResult = resolveResult;
 	}
 
-	async submit(result: ReviewFeedbackExport, acknowledge: () => Promise<void>): Promise<void> {
-		if (this.state !== SUBMISSION_STATE.PENDING) {
-			throw new ReviewFeedbackConflictError();
+	async complete(result: ReviewFeedbackExport, acknowledge: () => Promise<void>): Promise<void> {
+		if (this.state !== COMPLETION_STATE.PENDING) {
+			throw new ReviewSessionConflictError();
 		}
 
-		this.state = SUBMISSION_STATE.SUBMITTING;
+		this.state = COMPLETION_STATE.COMPLETING;
 		try {
 			await acknowledge();
 		} catch (error) {
-			this.state = SUBMISSION_STATE.PENDING;
+			this.state = COMPLETION_STATE.PENDING;
 			throw error;
 		}
 
-		this.state = SUBMISSION_STATE.SUBMITTED;
+		this.state = COMPLETION_STATE.COMPLETED;
 		this.resolveResult(result);
 	}
+}
+
+export function buildEmptyReviewFeedbackExport(gitRef: string): ReviewFeedbackExport {
+	return {
+		gitRef,
+		approved: false,
+		feedback: "",
+		annotations: [],
+	};
 }
 
 export function buildReviewFeedbackExport(

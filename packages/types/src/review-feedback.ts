@@ -37,3 +37,8 @@ export const ReviewFeedbackResponseSchema = z.object({
 	commentCount: z.number().int().positive(),
 });
 export type ReviewFeedbackResponse = z.infer<typeof ReviewFeedbackResponseSchema>;
+
+export const ReviewExitResponseSchema = z.object({
+	closed: z.literal(true),
+});
+export type ReviewExitResponse = z.infer<typeof ReviewExitResponseSchema>;
