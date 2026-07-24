@@ -17,7 +17,6 @@ export function SendToCodexButton({ runId }: { runId: string }) {
 	const { threads, isLoading } = useCommentThreadsContext();
 	const submission = useReviewFeedback(runId);
 	const unresolvedCount = threads.filter((thread) => thread.resolvedAt === null).length;
-	const unresolvedLabel = `${unresolvedCount} unresolved ${unresolvedCount === 1 ? "thread" : "threads"}`;
 	const isSubmitted = submission.isSuccess;
 	const isDisabled = isLoading || unresolvedCount === 0 || submission.isPending || isSubmitted;
 
@@ -45,7 +44,7 @@ export function SendToCodexButton({ runId }: { runId: string }) {
 								? "Sending…"
 								: isSubmitted
 									? "Sent — closing Stage"
-									: `Send to Codex · ${unresolvedLabel}`}
+									: "Send to Codex"}
 					</span>
 				</Button>
 			</PopoverTrigger>

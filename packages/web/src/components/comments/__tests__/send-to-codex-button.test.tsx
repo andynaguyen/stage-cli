@@ -1,13 +1,14 @@
 // @vitest-environment happy-dom
 
 import type { CommentThread } from "@stagereview/types/comments";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { makeWrapper } from "@/lib/__tests__/fixtures";
 import { CommentThreadsProvider } from "@/lib/comment-threads-context";
 import { SendToCodexButton } from "../send-to-codex-button";
 
 afterEach(() => {
+	cleanup();
 	vi.unstubAllGlobals();
 	vi.clearAllMocks();
 });
@@ -65,15 +66,21 @@ function postCount(): number {
 		.length;
 }
 
+function getConfirmationButton(trigger: HTMLElement): HTMLElement {
+	const confirm = screen
+		.getAllByRole("button", { name: "Send to Codex" })
+		.find((button) => button !== trigger);
+	if (confirm === undefined) throw new Error("Send confirmation button was not rendered");
+	return confirm;
+}
+
 describe("SendToCodexButton", () => {
 	it("disables the action when no unresolved threads exist", async () => {
 		renderButton([makeThread({ resolvedAt: "2026-07-24T11:00:00.000Z" })], async () =>
 			jsonResponse({ threadCount: 1, commentCount: 1 }),
 		);
 
-		const button = await screen.findByRole("button", {
-			name: "Send to Codex · 0 unresolved threads",
-		});
+		const button = await screen.findByRole("button", { name: "Send to Codex" });
 		expect(button.hasAttribute("disabled")).toBe(true);
 	});
 
@@ -87,9 +94,7 @@ describe("SendToCodexButton", () => {
 			async () => jsonResponse({ threadCount: 2, commentCount: 2 }),
 		);
 
-		const button = await screen.findByRole("button", {
-			name: "Send to Codex · 2 unresolved threads",
-		});
+		const button = await screen.findByRole("button", { name: "Send to Codex" });
 
 		fireEvent.click(button);
 
@@ -101,9 +106,7 @@ describe("SendToCodexButton", () => {
 
 	it("cancels without submitting", async () => {
 		renderButton([makeThread()], async () => jsonResponse({ threadCount: 1, commentCount: 1 }));
-		const trigger = await screen.findByRole("button", {
-			name: "Send to Codex · 1 unresolved thread",
-		});
+		const trigger = await screen.findByRole("button", { name: "Send to Codex" });
 		fireEvent.click(trigger);
 		await screen.findByText("Send review to Codex");
 
@@ -119,11 +122,10 @@ describe("SendToCodexButton", () => {
 			finishSubmission = resolve;
 		});
 		renderButton([makeThread()], () => pending);
-		const trigger = await screen.findByRole("button", {
-			name: "Send to Codex · 1 unresolved thread",
-		});
+		const trigger = await screen.findByRole("button", { name: "Send to Codex" });
 		fireEvent.click(trigger);
-		const confirm = await screen.findByRole("button", { name: "Send to Codex" });
+		await screen.findByText("Send review to Codex");
+		const confirm = getConfirmationButton(trigger);
 
 		fireEvent.click(confirm);
 		await waitFor(() => expect(confirm.textContent).toContain("Sending…"));
@@ -144,11 +146,10 @@ describe("SendToCodexButton", () => {
 				? jsonResponse({ error: "failed" }, 500)
 				: jsonResponse({ threadCount: 1, commentCount: 1 });
 		});
-		const trigger = await screen.findByRole("button", {
-			name: "Send to Codex · 1 unresolved thread",
-		});
+		const trigger = await screen.findByRole("button", { name: "Send to Codex" });
 		fireEvent.click(trigger);
-		const confirm = await screen.findByRole("button", { name: "Send to Codex" });
+		await screen.findByText("Send review to Codex");
+		const confirm = getConfirmationButton(trigger);
 
 		fireEvent.click(confirm);
 		expect(await screen.findByRole("alert")).toBeTruthy();
