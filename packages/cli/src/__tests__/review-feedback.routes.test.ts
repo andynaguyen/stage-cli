@@ -25,7 +25,7 @@ beforeEach(async () => {
 	await fs.mkdir(webDist);
 	await fs.writeFile(path.join(webDist, "index.html"), "<html></html>");
 	closeDb();
-	session = new ReviewFeedbackSession();
+	session = new ReviewFeedbackSession("working tree");
 });
 
 afterEach(async () => {
@@ -129,8 +129,17 @@ describe("review feedback API", () => {
 
 		const first = await send(port, "POST", `/api/runs/${runId}/feedback`);
 		expect(first).toEqual({ status: 200, body: { threadCount: 1, commentCount: 2 } });
-		await expect(session.feedback).resolves.toContain("Submit me\n\nReply");
-		await expect(session.feedback).resolves.not.toContain("Hide me");
+		const result = await session.result;
+		expect(result).toMatchObject({
+			gitRef: "working tree",
+			approved: false,
+			annotations: [
+				{ type: "comment", side: "new", text: "Submit me" },
+				{ type: "comment", side: "new", text: "Reply" },
+			],
+		});
+		expect(result.feedback).toContain("Submit me\n\nReply");
+		expect(result.feedback).not.toContain("Hide me");
 
 		const repeated = await send(port, "POST", `/api/runs/${runId}/feedback`);
 		expect(repeated.status).toBe(409);

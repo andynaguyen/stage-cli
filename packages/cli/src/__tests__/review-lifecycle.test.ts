@@ -1,7 +1,17 @@
 import { EventEmitter } from "node:events";
+import type { ReviewFeedbackExport } from "@stagereview/types/review-feedback";
 import { describe, expect, it, vi } from "vitest";
 import { ReviewFeedbackSession } from "../review-feedback.js";
 import { type ReviewSessionDependencies, runReviewSession } from "../review-lifecycle.js";
+
+function makeResult(): ReviewFeedbackExport {
+	return {
+		gitRef: "working tree",
+		approved: false,
+		feedback: "# Code Review Feedback\n",
+		annotations: [],
+	};
+}
 
 function makeDependencies(over: Partial<ReviewSessionDependencies> = {}): {
 	dependencies: ReviewSessionDependencies;
@@ -34,25 +44,27 @@ function makeDependencies(over: Partial<ReviewSessionDependencies> = {}): {
 
 describe("runReviewSession", () => {
 	it("closes resources and writes feedback when submission wins", async () => {
-		const session = new ReviewFeedbackSession();
+		const session = new ReviewFeedbackSession("working tree");
 		const { dependencies, events, signals } = makeDependencies();
 		const running = runReviewSession(session, dependencies);
 		await Promise.resolve();
 
-		await session.submit("# Stage Review Feedback\n", async () => {});
+		await session.submit(makeResult(), async () => {});
 		await running;
 
 		expect(dependencies.writeStderr).toHaveBeenCalledWith(
 			"Listening on http://127.0.0.1:5391/runs/run-1\n",
 		);
-		expect(dependencies.writeStdout).toHaveBeenCalledWith("# Stage Review Feedback\n");
+		expect(dependencies.writeStdout).toHaveBeenCalledWith(
+			`${JSON.stringify(makeResult(), null, 2)}\n`,
+		);
 		expect(events).toEqual(["server closed", "database closed", "stdout written"]);
 		expect(signals.listenerCount("SIGINT")).toBe(0);
 		expect(signals.listenerCount("SIGTERM")).toBe(0);
 	});
 
 	it("cleans up without stdout when a signal wins", async () => {
-		const session = new ReviewFeedbackSession();
+		const session = new ReviewFeedbackSession("working tree");
 		const { dependencies, events, signals } = makeDependencies({
 			openBrowser: vi.fn(async () => {
 				throw new Error("browser unavailable");
@@ -72,7 +84,7 @@ describe("runReviewSession", () => {
 	});
 
 	it("closes the database when server shutdown fails", async () => {
-		const session = new ReviewFeedbackSession();
+		const session = new ReviewFeedbackSession("working tree");
 		const { dependencies, events, signals } = makeDependencies({
 			closeServer: vi.fn(async () => {
 				throw new Error("close failed");

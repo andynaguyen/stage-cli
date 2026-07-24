@@ -6,7 +6,7 @@ import { closeDb, getDb } from "./db/client.js";
 import { parseGitDiff } from "./diff-parser.js";
 import { filterFilesForLlm, loadStageIgnore } from "./filter-files.js";
 import { readRepoContext, readRepoRoot } from "./git.js";
-import { ReviewFeedbackSession } from "./review-feedback.js";
+import { formatReviewGitRef, ReviewFeedbackSession } from "./review-feedback.js";
 import { runReviewSession } from "./review-lifecycle.js";
 import { commentRoutes } from "./routes/comments.js";
 import { diffRoutes } from "./routes/diff.js";
@@ -34,7 +34,7 @@ export async function show(jsonPath: string, options: DiffScopeOptions): Promise
 	try {
 		const { chaptersFile, prNumber } = await buildChaptersFile(jsonPath, options);
 		const { runId } = insertChaptersFile(db, chaptersFile, readRepoContext(), prNumber);
-		const feedbackSession = new ReviewFeedbackSession();
+		const feedbackSession = new ReviewFeedbackSession(formatReviewGitRef(chaptersFile.scope));
 		const handle = await startServer({
 			routes: [
 				...runRoutes(db),

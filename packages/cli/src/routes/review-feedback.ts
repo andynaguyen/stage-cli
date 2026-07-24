@@ -2,7 +2,7 @@ import { finished } from "node:stream/promises";
 import type { ReviewFeedbackResponse } from "@stagereview/types/review-feedback";
 import type { StageDb } from "../db/client.js";
 import {
-	formatReviewFeedback,
+	buildReviewFeedbackExport,
 	ReviewFeedbackConflictError,
 	type ReviewFeedbackSession,
 } from "../review-feedback.js";
@@ -35,7 +35,7 @@ export function reviewFeedbackRoutes(db: StageDb, session: ReviewFeedbackSession
 					threadCount: threads.length,
 					commentCount: threads.reduce((count, thread) => count + thread.comments.length, 0),
 				};
-				const feedback = formatReviewFeedback(threads);
+				const feedback = buildReviewFeedbackExport(session.gitRef, threads);
 
 				try {
 					await session.submit(feedback, async () => {

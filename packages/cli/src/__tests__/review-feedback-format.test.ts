@@ -1,6 +1,15 @@
 import type { Comment, CommentThread } from "@stagereview/types/comments";
 import { describe, expect, it } from "vitest";
-import { formatReviewFeedback } from "../review-feedback.js";
+import {
+	buildReviewFeedbackExport,
+	formatReviewGitRef,
+	serializeReviewFeedback,
+} from "../review-feedback.js";
+
+const SHA = {
+	BASE: "1".repeat(40),
+	HEAD: "2".repeat(40),
+} as const;
 
 function makeComment(over: Partial<Comment> = {}): Comment {
 	return {
@@ -28,9 +37,9 @@ function makeThread(over: Partial<CommentThread> = {}): CommentThread {
 	};
 }
 
-describe("formatReviewFeedback", () => {
-	it("orders anchors and replies while excluding resolved threads", () => {
-		const feedback = formatReviewFeedback([
+describe("buildReviewFeedbackExport", () => {
+	it("emits Plannotator-compatible Markdown and raw annotations", () => {
+		const result = buildReviewFeedbackExport("working tree", [
 			makeThread({
 				id: "deletion",
 				filePath: "src/zeta.ts",
@@ -53,29 +62,120 @@ describe("formatReviewFeedback", () => {
 				filePath: "src/alpha.ts",
 				startLine: 2,
 				endLine: 5,
-				comments: [makeComment({ body: "Keep `markdown` intact." })],
+				comments: [makeComment({ id: "alpha", body: "Keep `markdown` intact." })],
 			}),
 		]);
 
-		expect(feedback).toBe(`# Stage Review Feedback
+		expect(result).toEqual({
+			gitRef: "working tree",
+			approved: false,
+			feedback: `# Code Review Feedback
 
-## \`src/alpha.ts\` — additions, lines 2–5
+**Diff:** Uncommitted changes
+
+## src/alpha.ts
+
+### Lines 2-5 (new)
 
 Keep \`markdown\` intact.
 
-## \`src/zeta.ts\` — deletions, line 9
+## src/zeta.ts
+
+### Line 9 (old)
 
 First
 
 **Second**
+`,
+			annotations: [
+				{
+					id: "alpha",
+					threadId: "addition",
+					type: "comment",
+					filePath: "src/alpha.ts",
+					lineStart: 2,
+					lineEnd: 5,
+					side: "new",
+					text: "Keep `markdown` intact.",
+					authorId: "local",
+					createdAt: "2026-07-24T10:00:00.000Z",
+					updatedAt: "2026-07-24T10:00:00.000Z",
+				},
+				{
+					id: "root",
+					threadId: "deletion",
+					type: "comment",
+					filePath: "src/zeta.ts",
+					lineStart: 9,
+					lineEnd: 9,
+					side: "old",
+					text: "First",
+					authorId: "local",
+					createdAt: "2026-07-24T11:00:00Z",
+					updatedAt: "2026-07-24T10:00:00.000Z",
+				},
+				{
+					id: "reply",
+					threadId: "deletion",
+					type: "comment",
+					filePath: "src/zeta.ts",
+					lineStart: 9,
+					lineEnd: 9,
+					side: "old",
+					text: "**Second**",
+					authorId: "local",
+					createdAt: "2026-07-24T12:00:00Z",
+					updatedAt: "2026-07-24T10:00:00.000Z",
+				},
+			],
+		});
+		expect(serializeReviewFeedback(result)).toBe(`${JSON.stringify(result, null, 2)}\n`);
+	});
 
-Address each comment above. Inspect the referenced code before changing it,
-and explain any comment you believe should not be applied.
-`);
+	it("formats reviewed scopes as stable gitRef labels", () => {
+		expect(
+			formatReviewGitRef({
+				kind: "committed",
+				baseSha: SHA.BASE,
+				headSha: SHA.HEAD,
+				mergeBaseSha: SHA.BASE,
+			}),
+		).toBe(`${SHA.BASE}..${SHA.HEAD}`);
+		expect(
+			formatReviewGitRef({
+				kind: "workingTree",
+				ref: "work",
+				baseSha: SHA.BASE,
+				headSha: SHA.HEAD,
+				mergeBaseSha: SHA.BASE,
+			}),
+		).toBe("working tree");
+		expect(
+			formatReviewGitRef({
+				kind: "workingTree",
+				ref: "staged",
+				baseSha: SHA.BASE,
+				headSha: SHA.HEAD,
+				mergeBaseSha: SHA.BASE,
+			}),
+		).toBe("--staged");
+		expect(
+			formatReviewGitRef({
+				kind: "workingTree",
+				ref: "unstaged",
+				baseSha: SHA.BASE,
+				headSha: SHA.HEAD,
+				mergeBaseSha: SHA.BASE,
+			}),
+		).toBe("unstaged");
 	});
 
 	it("fails loudly when there is no usable feedback", () => {
-		expect(() => formatReviewFeedback([])).toThrow("empty Stage review feedback");
-		expect(() => formatReviewFeedback([makeThread({ comments: [] })])).toThrow("has no comments");
+		expect(() => buildReviewFeedbackExport("working tree", [])).toThrow(
+			"empty Stage review feedback",
+		);
+		expect(() => buildReviewFeedbackExport("working tree", [makeThread({ comments: [] })])).toThrow(
+			"has no comments",
+		);
 	});
 });

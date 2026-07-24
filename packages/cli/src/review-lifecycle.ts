@@ -1,5 +1,6 @@
 import type { EventEmitter } from "node:events";
-import type { ReviewFeedbackSession } from "./review-feedback.js";
+import type { ReviewFeedbackExport } from "@stagereview/types/review-feedback";
+import { type ReviewFeedbackSession, serializeReviewFeedback } from "./review-feedback.js";
 
 const REVIEW_OUTCOME = {
 	FEEDBACK: "feedback",
@@ -7,7 +8,7 @@ const REVIEW_OUTCOME = {
 } as const;
 
 type ReviewOutcome =
-	| { kind: typeof REVIEW_OUTCOME.FEEDBACK; feedback: string }
+	| { kind: typeof REVIEW_OUTCOME.FEEDBACK; result: ReviewFeedbackExport }
 	| { kind: typeof REVIEW_OUTCOME.SIGNAL };
 
 export interface ReviewSessionDependencies {
@@ -45,7 +46,7 @@ export async function runReviewSession(
 	}
 
 	if (outcome.kind === REVIEW_OUTCOME.FEEDBACK) {
-		dependencies.writeStdout(outcome.feedback);
+		dependencies.writeStdout(serializeReviewFeedback(outcome.result));
 	}
 }
 
@@ -66,8 +67,8 @@ function waitForReviewOutcome(
 
 		signals.once("SIGINT", onSignal);
 		signals.once("SIGTERM", onSignal);
-		void session.feedback.then((feedback) => {
-			finish({ kind: REVIEW_OUTCOME.FEEDBACK, feedback });
+		void session.result.then((result) => {
+			finish({ kind: REVIEW_OUTCOME.FEEDBACK, result });
 		});
 	});
 }

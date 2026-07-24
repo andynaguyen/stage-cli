@@ -336,17 +336,33 @@ stagereview show "$AGENT_OUTPUT"
 
 Run `stagereview show` as a persistent foreground command and wait for it to finish. Do not background-and-forget the process. A tool may return a session ID while the foreground command remains active; in that case, keep waiting on that same session until the command exits.
 
-The command exits when the user either clicks **Send to Codex** in Stage or presses Ctrl+C. When feedback is submitted, stdout contains a Markdown document beginning with:
+The command exits when the user either clicks **Send to Codex** in Stage or presses Ctrl+C. When feedback is submitted, stdout contains a pretty-printed JSON object compatible with Plannotator's review handoff:
 
-```markdown
-# Stage Review Feedback
+```json
+{
+  "gitRef": "working tree",
+  "approved": false,
+  "feedback": "# Code Review Feedback\n\n...",
+  "annotations": [
+    {
+      "type": "comment",
+      "filePath": "src/example.ts",
+      "lineStart": 10,
+      "lineEnd": 15,
+      "side": "new",
+      "text": "Handle the null case before dereferencing."
+    }
+  ]
+}
 ```
 
-When that header is present, continue in this same task:
+Parse stdout as JSON. When it contains `approved: false` and `feedback` begins with `# Code Review Feedback`, continue in this same task:
 
 1. Inspect the referenced code before making changes.
 2. Address every submitted comment.
 3. Run verification appropriate to the changes.
 4. Explain any comment you did not apply, citing concrete code evidence.
 
-When the command exits without the feedback header, do not invent approval, requested changes, or review feedback. Treat it as the user closing Stage without submitting comments.
+Use `annotations` for exact file and line anchors; use the Markdown `feedback` field as the agent-readable review. Stage emits one annotation per authored comment, so replies share their thread's anchor and include a `threadId`.
+
+When the command exits without a JSON feedback object, do not invent approval, requested changes, or review feedback. Treat it as the user closing Stage without submitting comments.
