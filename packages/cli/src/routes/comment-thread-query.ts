@@ -94,7 +94,7 @@ export function toThreadDto(
 		side: thread.side,
 		startLine: thread.startLine,
 		endLine: thread.endLine,
-		resolvedAt: thread.resolvedAt?.toISOString() ?? null,
+		resolvedAt: thread.resolvedAt === null ? null : thread.resolvedAt.toISOString(),
 		createdAt: thread.createdAt.toISOString(),
 		updatedAt: thread.updatedAt.toISOString(),
 		comments: comments.map(toCommentDto),

@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
-import type { CommentThread } from "@stagereview/types/comments";
+import { type CommentThread, CommentThreadSchema } from "@stagereview/types/comments";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { closeDb, getDb } from "../db/client.js";
 import { ReviewFeedbackSession } from "../review-feedback.js";
@@ -98,7 +98,7 @@ async function createThread(port: number, runId: string, body: string): Promise<
 		body,
 	});
 	expect(response.status).toBe(201);
-	return response.body as CommentThread;
+	return CommentThreadSchema.parse(response.body);
 }
 
 describe("review feedback API", () => {
