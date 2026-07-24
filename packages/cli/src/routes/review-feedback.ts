@@ -1,9 +1,6 @@
 import type { ServerResponse } from "node:http";
 import { finished } from "node:stream/promises";
-import type {
-	ReviewFeedbackExport,
-	ReviewFeedbackResponse,
-} from "@stagereview/types/review-feedback";
+import type { ReviewFeedbackExport } from "@stagereview/types/review-feedback";
 import type { StageDb } from "../db/client.js";
 import {
 	buildReviewFeedbackExport,
@@ -38,13 +35,9 @@ export function reviewFeedbackRoutes(
 					return;
 				}
 
-				const response: ReviewFeedbackResponse = {
-					threadCount: threads.length,
-					commentCount: threads.reduce((count, thread) => count + thread.comments.length, 0),
-				};
 				const feedback = buildReviewFeedbackExport(session.scope, threads);
 
-				await completeReviewSession(res, session, feedback, response);
+				await completeReviewSession(res, session, feedback);
 			},
 		},
 	];
@@ -54,12 +47,12 @@ async function completeReviewSession(
 	res: ServerResponse,
 	session: ReviewFeedbackSession,
 	result: ReviewFeedbackExport,
-	response: ReviewFeedbackResponse,
 ): Promise<void> {
 	try {
 		await session.complete(result, async () => {
 			const responseFinished = finished(res, { cleanup: true });
-			writeJson(res, 200, response);
+			res.writeHead(204);
+			res.end();
 			await responseFinished;
 		});
 	} catch (error) {

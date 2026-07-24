@@ -50,6 +50,10 @@ function jsonResponse(body: unknown, status = 200): Response {
 	});
 }
 
+function noContentResponse(): Response {
+	return new Response(null, { status: 204 });
+}
+
 function renderButton(threads: CommentThread[], submit: () => Promise<Response>) {
 	vi.stubGlobal(
 		"fetch",
@@ -84,7 +88,7 @@ function getConfirmationButton(trigger: HTMLElement): HTMLElement {
 describe("SendToCodexButton", () => {
 	it("disables the action when no unresolved threads exist", async () => {
 		renderButton([makeThread({ resolvedAt: "2026-07-24T11:00:00.000Z" })], async () =>
-			jsonResponse({ threadCount: 1, commentCount: 1 }),
+			noContentResponse(),
 		);
 
 		const button = await screen.findByRole("button", { name: "Send to Codex" });
@@ -113,7 +117,7 @@ describe("SendToCodexButton", () => {
 					comments: [makeComment("comment-4", "This is already resolved")],
 				}),
 			],
-			async () => jsonResponse({ threadCount: 2, commentCount: 3 }),
+			async () => noContentResponse(),
 		);
 
 		const trigger = await screen.findByRole("button", { name: "Send to Codex" });
@@ -148,7 +152,7 @@ describe("SendToCodexButton", () => {
 	});
 
 	it("cancels without submitting", async () => {
-		renderButton([makeThread()], async () => jsonResponse({ threadCount: 1, commentCount: 1 }));
+		renderButton([makeThread()], async () => noContentResponse());
 		const trigger = await screen.findByRole("button", { name: "Send to Codex" });
 		fireEvent.click(trigger);
 		await screen.findByText("Send review to Codex");
@@ -177,7 +181,7 @@ describe("SendToCodexButton", () => {
 		expect(screen.queryByText("Sending…")).toBeNull();
 		expect(confirm.hasAttribute("disabled")).toBe(true);
 
-		finishSubmission(jsonResponse({ threadCount: 1, commentCount: 1 }));
+		finishSubmission(noContentResponse());
 		await waitFor(() => expect(screen.queryByText("Send review to Codex")).toBeNull());
 		expect(trigger.textContent).toContain("Send to Codex");
 		expect(trigger.hasAttribute("disabled")).toBe(true);
@@ -191,9 +195,7 @@ describe("SendToCodexButton", () => {
 		let submissions = 0;
 		renderButton([makeThread()], async () => {
 			submissions += 1;
-			return submissions === 1
-				? jsonResponse({ error: "failed" }, 500)
-				: jsonResponse({ threadCount: 1, commentCount: 1 });
+			return submissions === 1 ? jsonResponse({ error: "failed" }, 500) : noContentResponse();
 		});
 		const trigger = await screen.findByRole("button", { name: "Send to Codex" });
 		fireEvent.click(trigger);

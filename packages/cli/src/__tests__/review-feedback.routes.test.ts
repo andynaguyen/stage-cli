@@ -120,7 +120,7 @@ describe("review feedback API", () => {
 		expect((await send(port, "POST", "/api/feedback")).status).toBe(409);
 	});
 
-	it("submits unresolved comments once and reports both counts", async () => {
+	it("submits unresolved comments once", async () => {
 		const runId = seedRun();
 		const port = await start(runId);
 		const open = await createThread(port, runId, "Submit me");
@@ -129,7 +129,7 @@ describe("review feedback API", () => {
 		await send(port, "PATCH", `/api/comment-threads/${resolved.id}`, { resolved: true });
 
 		const first = await send(port, "POST", "/api/feedback");
-		expect(first).toEqual({ status: 200, body: { threadCount: 1, commentCount: 2 } });
+		expect(first).toEqual({ status: 204, body: null });
 		const result = await session.result;
 		expect(result).toMatchObject({
 			gitRef: formatReviewGitRef(makeFixture().scope),
@@ -165,7 +165,7 @@ describe("review feedback API", () => {
 		await createThread(port, inactiveRunId, "Do not submit");
 		await createThread(port, activeRunId, "Submit active review");
 
-		expect((await send(port, "POST", "/api/feedback")).status).toBe(200);
+		expect((await send(port, "POST", "/api/feedback")).status).toBe(204);
 
 		const result = await session.result;
 		expect(result.feedback).toContain("Submit active review");
