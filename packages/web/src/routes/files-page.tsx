@@ -1,7 +1,8 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { FileDiffList, FilePicker, SidebarLayout, type ViewedConfig } from "@/components/files";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useProvideCollapseActions } from "@/lib/collapse-actions-context";
+import { useCommentThreadsContext } from "@/lib/comment-threads-context";
 import { FILE_STATUS, FILE_VIEWED_STATE } from "@/lib/diff-types";
 import { buildFileTree, flattenFileTree, sortFileTree } from "@/lib/file-tree";
 import { type FileDiffEntry, useFileDiffEntries } from "@/lib/parse-diff";
@@ -15,10 +16,12 @@ const NO_COMMENT_COUNTS: Map<string, number> = new Map();
 
 interface FilesPageProps {
 	runId: string;
+	focusedThreadId?: string;
 }
 
-export function FilesPage({ runId }: FilesPageProps) {
+export function FilesPage({ runId, focusedThreadId }: FilesPageProps) {
 	const { data: diffData, isLoading, error } = useDiffPatch(runId);
+	const { threads } = useCommentThreadsContext();
 
 	const rawEntries = useFileDiffEntries(diffData?.patch, diffData?.fileContents);
 	const entries = useMemo(() => sortFileDiffEntries(rawEntries), [rawEntries]);
@@ -51,12 +54,32 @@ export function FilesPage({ runId }: FilesPageProps) {
 	const collapseState = useFileCollapseState(defaultCollapsedFileIds, filePaths, runId);
 	useProvideCollapseActions(collapseState, filePaths.length);
 
-	const { diffListRef, currentFilePath, keyboardFocusedFilePath, handleSelectFile } =
-		useFileDiffNavigation({
-			files,
-			onToggleViewed: handleToggleViewed,
-			collapse: collapseState,
-		});
+	const {
+		diffListRef,
+		currentFilePath,
+		keyboardFocusedFilePath,
+		handleSelectFile,
+		scrollToCommentThread,
+		cancelScrollToLine,
+	} = useFileDiffNavigation({
+		files,
+		onToggleViewed: handleToggleViewed,
+		collapse: collapseState,
+	});
+	const focusedThread = threads.find((thread) => thread.id === focusedThreadId);
+	const focusedThreadPath = focusedThread?.filePath;
+
+	useEffect(() => {
+		if (
+			diffData === undefined ||
+			focusedThreadId === undefined ||
+			focusedThreadPath === undefined
+		) {
+			return;
+		}
+		scrollToCommentThread({ id: focusedThreadId, filePath: focusedThreadPath });
+		return cancelScrollToLine;
+	}, [diffData, focusedThreadId, focusedThreadPath, scrollToCommentThread, cancelScrollToLine]);
 
 	const viewed = useMemo<ViewedConfig>(
 		() => ({

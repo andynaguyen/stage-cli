@@ -94,13 +94,13 @@ describe("buildReviewFeedbackExport", () => {
 
 ## src/alpha.ts
 
-### Lines 2-5 (new)
+### L2-5 (new)
 
 Keep \`markdown\` intact.
 
 ## src/zeta.ts
 
-### Line 9 (old)
+### L9 (old)
 
 First
 

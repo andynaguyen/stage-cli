@@ -8,6 +8,7 @@ import {
 	findDraftAt,
 	isSameAnchor,
 	readDraftBody,
+	toSelectedLineRange,
 	upsertDraft,
 	writeDraftBody,
 } from "../comment-drafts";
@@ -39,6 +40,17 @@ function rowFor(
 ) {
 	return annotations.find((a) => a.side === side && a.lineNumber === lineNumber);
 }
+
+describe("toSelectedLineRange", () => {
+	it("keeps every line in a multiline draft on the same diff side", () => {
+		expect(toSelectedLineRange(draftState("additions", 4, 7))).toEqual({
+			start: 4,
+			side: "additions",
+			end: 7,
+			endSide: "additions",
+		});
+	});
+});
 
 describe("buildCommentAnnotations", () => {
 	it("returns no annotations for no threads and no drafts", () => {

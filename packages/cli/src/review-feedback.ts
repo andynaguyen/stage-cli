@@ -164,8 +164,8 @@ function compareText(left: string, right: string): number {
 function formatThread(thread: CommentThread): string {
 	const range =
 		thread.startLine === thread.endLine
-			? `Line ${thread.startLine}`
-			: `Lines ${thread.startLine}-${thread.endLine}`;
+			? `L${thread.startLine}`
+			: `L${thread.startLine}-${thread.endLine}`;
 	const comments = sortComments(thread.comments).map((comment) => comment.body);
 
 	return [`### ${range} (${formatSide(thread.side)})`, ...comments].join("\n\n");

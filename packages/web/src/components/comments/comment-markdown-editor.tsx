@@ -19,6 +19,7 @@ interface CommentMarkdownEditorProps {
 	onChange: (value: string) => void;
 	textareaRef: RefObject<HTMLTextAreaElement | null>;
 	placeholder: string;
+	contextLabel?: string;
 	disabled?: boolean;
 	minRows?: number;
 	maxRows?: number;
@@ -34,6 +35,7 @@ export function CommentMarkdownEditor({
 	onChange,
 	textareaRef,
 	placeholder,
+	contextLabel,
 	disabled = false,
 	minRows = 2,
 	maxRows,
@@ -48,7 +50,7 @@ export function CommentMarkdownEditor({
 	return (
 		<fieldset className={className} onKeyDown={onKeyDown}>
 			<div className="flex min-w-0 items-center justify-between gap-2 overflow-hidden border-border border-b">
-				<div className="flex shrink-0 items-center gap-1 px-2">
+				<div className="flex min-w-0 shrink items-center gap-1 px-2">
 					{Object.values(EDITOR_MODE).map((nextMode) => {
 						const isActive = mode === nextMode;
 						return (
@@ -68,6 +70,12 @@ export function CommentMarkdownEditor({
 							</button>
 						);
 					})}
+					{contextLabel && (
+						<>
+							<span className="mx-1 h-4 w-px shrink-0 bg-border" aria-hidden="true" />
+							<span className="truncate text-muted-foreground text-xs">{contextLabel}</span>
+						</>
+					)}
 				</div>
 				{/* Suggestion blocks only apply on a PR, so omit that toolbar item for local comments. */}
 				<MarkdownToolbar

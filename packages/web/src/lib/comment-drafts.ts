@@ -1,4 +1,4 @@
-import type { DiffLineAnnotation } from "@pierre/diffs";
+import type { DiffLineAnnotation, SelectedLineRange } from "@pierre/diffs";
 import type { DiffSide } from "@/lib/diff-types";
 import type { CommentThread } from "@/lib/use-comment-threads";
 
@@ -7,6 +7,15 @@ export interface CommentDraft {
 	side: DiffSide;
 	startLine: number;
 	endLine: number;
+}
+
+export function toSelectedLineRange(draft: CommentDraft): SelectedLineRange {
+	return {
+		start: draft.startLine,
+		side: draft.side,
+		end: draft.endLine,
+		endSide: draft.side,
+	};
 }
 
 /** A draft plus the last submit error for its composer (null while clean). */

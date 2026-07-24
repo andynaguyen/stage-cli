@@ -7,9 +7,15 @@ import type { AnnotatedLineRef, DiffSide, LineRef } from "@/lib/diff-types";
 import type { FileDiffEntry } from "@/lib/parse-diff";
 import { cn } from "@/lib/utils";
 
+export interface CommentThreadTarget {
+	id: string;
+	filePath: string;
+}
+
 export interface FileDiffListHandle {
 	scrollToFile: (filePath: string) => void;
 	scrollToLine: (filePath: string, side: DiffSide, line: number) => void;
+	scrollToCommentThread: (thread: CommentThreadTarget) => void;
 	cancelScrollToLine: () => void;
 }
 
@@ -49,6 +55,18 @@ interface FileDiffListProps {
 const FILE_TOP_PADDING = 16;
 const SCROLL_TO_LINE_POLL_MS = 100;
 const SCROLL_TO_LINE_TIMEOUT_MS = 3000;
+
+function findCommentThreadElement(
+	fileContainer: HTMLElement,
+	threadId: string,
+): HTMLElement | null {
+	const elementId = `comment-thread-${threadId}`;
+	const lightDomElement = fileContainer.ownerDocument.getElementById(elementId);
+	if (lightDomElement) return lightDomElement;
+	const shadowRoot = fileContainer.querySelector("diffs-container")?.shadowRoot;
+	if (!shadowRoot) return null;
+	return shadowRoot.getElementById(elementId);
+}
 
 export const FileDiffList = forwardRef<FileDiffListHandle, FileDiffListProps>(function FileDiffList(
 	{
@@ -188,6 +206,42 @@ export const FileDiffList = forwardRef<FileDiffListHandle, FileDiffListProps>(fu
 				const fileContainer = document.getElementById(`file-${filePath}`);
 				if (!fileContainer) return;
 				runWithContainer(fileContainer, side, line, isLatestRequest);
+			},
+			scrollToCommentThread(thread: CommentThreadTarget) {
+				cancelPending();
+				if (!entries.some((entry) => entry.file.path === thread.filePath)) return;
+
+				const requestToken = scrollRequestRef.current;
+				const isLatestRequest = () => scrollRequestRef.current === requestToken;
+				if (collapseState.collapsedFiles.has(thread.filePath)) {
+					collapseState.toggleFileCollapsed(thread.filePath);
+				}
+
+				const fileContainer = document.getElementById(`file-${thread.filePath}`);
+				if (!fileContainer) return;
+
+				const tryScroll = () => {
+					if (!isLatestRequest()) return true;
+					const threadElement = findCommentThreadElement(fileContainer, thread.id);
+					if (!threadElement) return false;
+					threadElement.scrollIntoView({ behavior: "smooth", block: "center" });
+					threadElement.focus({ preventScroll: true });
+					return true;
+				};
+				if (tryScroll()) return;
+
+				let retryTimer: ReturnType<typeof setInterval>;
+				let timeoutHandle: ReturnType<typeof setTimeout>;
+				const disconnectAll = () => {
+					clearInterval(retryTimer);
+					clearTimeout(timeoutHandle);
+					pendingDisconnectsRef.current.delete(disconnectAll);
+				};
+				retryTimer = setInterval(() => {
+					if (!isLatestRequest() || tryScroll()) disconnectAll();
+				}, SCROLL_TO_LINE_POLL_MS);
+				timeoutHandle = setTimeout(disconnectAll, SCROLL_TO_LINE_TIMEOUT_MS);
+				pendingDisconnectsRef.current.add(disconnectAll);
 			},
 		};
 	}, [entries, collapseState]);

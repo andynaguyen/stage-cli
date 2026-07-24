@@ -1,22 +1,18 @@
-import type { CommentThread } from "@stagereview/types/comments";
-import { ChevronRight, LoaderCircle, Send } from "lucide-react";
+import { ArrowRight, LoaderCircle, Send, Sparkles } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import {
-	Popover,
-	PopoverContent,
-	PopoverHeader,
-	PopoverTitle,
-	PopoverTrigger,
-} from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverHeader, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "@/components/ui/sonner";
 import { useCommentThreadsContext } from "@/lib/comment-threads-context";
+import { formatLineRange } from "@/lib/format";
 import { useReviewFeedback } from "@/lib/use-review-feedback";
 
-export function SendToCodexButton() {
+interface SendToCodexButtonProps {
+	onSelectThread: (threadId: string) => void;
+}
+
+export function SendToCodexButton({ onSelectThread }: SendToCodexButtonProps) {
 	const [isOpen, setIsOpen] = useState(false);
-	const [areCommentsOpen, setAreCommentsOpen] = useState(false);
 	const { threads, isLoading } = useCommentThreadsContext();
 	const submission = useReviewFeedback();
 	const unresolvedThreads = threads.filter((thread) => thread.resolvedAt === null);
@@ -32,7 +28,6 @@ export function SendToCodexButton() {
 		setIsOpen(open);
 		if (!open) return;
 		submission.reset();
-		setAreCommentsOpen(false);
 	};
 
 	const handleSubmit = () => {
@@ -44,6 +39,11 @@ export function SendToCodexButton() {
 		});
 	};
 
+	const handleSelectThread = (threadId: string) => {
+		setIsOpen(false);
+		onSelectThread(threadId);
+	};
+
 	return (
 		<Popover open={isOpen} onOpenChange={handleOpenChange}>
 			<PopoverTrigger asChild>
@@ -51,7 +51,7 @@ export function SendToCodexButton() {
 					{isLoading || submission.isPending ? (
 						<LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
 					) : (
-						<Send className="size-3.5" aria-hidden="true" />
+						<Sparkles className="size-3.5" aria-hidden="true" />
 					)}
 					<span className="text-xs">{isLoading ? "Loading comments…" : "Send to Codex"}</span>
 				</Button>
@@ -62,59 +62,48 @@ export function SendToCodexButton() {
 				collisionPadding={16}
 				className="w-96 max-w-[calc(100vw-2rem)] p-0"
 			>
-				<PopoverHeader className="gap-2 p-4">
-					<PopoverTitle className="flex items-center gap-2">
-						<Send className="size-4 text-primary" aria-hidden="true" />
-						Send review to Codex
-					</PopoverTitle>
+				<PopoverHeader className="flex-row items-center gap-4 p-4">
+					<span className="font-medium">Comments</span>
+					<span className="rounded-md bg-secondary px-2 py-1 font-medium text-xs tabular-nums">
+						{commentCount}
+					</span>
 				</PopoverHeader>
 
-				<Collapsible
-					open={areCommentsOpen}
-					onOpenChange={setAreCommentsOpen}
-					className="border-y bg-muted/30"
-				>
-					<CollapsibleTrigger
-						aria-label={`${areCommentsOpen ? "Collapse" : "Expand"} comments (${commentCount})`}
-						className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-					>
-						<span className="flex items-center gap-4">
-							<span className="font-medium text-sm">Comments</span>
-							<span className="rounded-md bg-secondary px-2 py-1 font-medium text-xs tabular-nums">
-								{commentCount}
-							</span>
-						</span>
-						<ChevronRight
-							className="size-4 text-muted-foreground transition-transform duration-200 [[data-state=open]>&]:rotate-90"
-							aria-hidden="true"
-						/>
-					</CollapsibleTrigger>
-					<CollapsibleContent className="border-t">
-						<ul className="max-h-64 divide-y overflow-y-auto">
-							{unresolvedThreads.map((thread) => (
-								<li key={thread.id} className="px-4 py-3">
-									<p className="flex min-w-0 items-center gap-1.5 text-muted-foreground text-xs">
-										<span className="truncate">{thread.filePath}</span>
-										<span aria-hidden="true">·</span>
-										<span className="shrink-0">{formatLineRange(thread)}</span>
-									</p>
-									<ul className="mt-2 space-y-2">
-										{thread.comments.map((comment) => (
-											<li
-												key={comment.id}
-												className="border-border border-l-2 pl-3 text-sm leading-relaxed"
-											>
-												<p className="line-clamp-3 whitespace-pre-wrap break-words">
-													{comment.body}
-												</p>
-											</li>
-										))}
-									</ul>
-								</li>
-							))}
-						</ul>
-					</CollapsibleContent>
-				</Collapsible>
+				<ul className="scrollbar-thin max-h-64 divide-y overflow-y-auto border-y bg-muted/30">
+					{unresolvedThreads.map((thread) => (
+						<li key={thread.id}>
+							<button
+								type="button"
+								className="group w-full cursor-pointer px-4 py-3 text-left outline-none transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+								onClick={() => handleSelectThread(thread.id)}
+								aria-label={`Go to ${thread.filePath}, ${formatLineRange(thread)}`}
+							>
+								<span className="flex items-center justify-between gap-3">
+									<span className="truncate text-muted-foreground text-xs">{thread.filePath}</span>
+									<ArrowRight
+										className="size-3.5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-focus-visible:translate-x-0.5"
+										aria-hidden="true"
+									/>
+								</span>
+								<span className="mt-2 block space-y-2">
+									{thread.comments.map((comment) => (
+										<span
+											key={comment.id}
+											className="block border-border border-l-2 pl-3 text-sm leading-relaxed"
+										>
+											<span className="mb-1 block font-medium text-muted-foreground text-xs">
+												{formatLineRange(thread)}
+											</span>
+											<span className="line-clamp-3 whitespace-pre-wrap break-words">
+												{comment.body}
+											</span>
+										</span>
+									))}
+								</span>
+							</button>
+						</li>
+					))}
+				</ul>
 
 				{submission.isError && (
 					<p className="px-4 pt-3 text-destructive text-xs" role="alert">
@@ -143,15 +132,10 @@ export function SendToCodexButton() {
 						) : (
 							<Send className="size-3.5" aria-hidden="true" />
 						)}
-						Send to Codex
+						Submit
 					</Button>
 				</div>
 			</PopoverContent>
 		</Popover>
 	);
-}
-
-function formatLineRange(thread: CommentThread): string {
-	if (thread.startLine === thread.endLine) return `Line ${thread.startLine}`;
-	return `Lines ${thread.startLine}–${thread.endLine}`;
 }

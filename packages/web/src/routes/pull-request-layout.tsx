@@ -1,4 +1,4 @@
-import { Link, Outlet, useRouterState } from "@tanstack/react-router";
+import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { BookOpen, FileText, FoldVertical, Settings2, UnfoldVertical } from "lucide-react";
 import { type CSSProperties, useCallback, useMemo, useRef, useState } from "react";
 import { SendToCodexButton } from "@/components/comments/send-to-codex-button";
@@ -116,6 +116,7 @@ function ErrorState({ error }: { error: unknown }) {
 }
 
 export function PullRequestLayout({ runId }: { runId: string }) {
+	const navigate = useNavigate();
 	const { data, error } = useChapters(runId);
 	const { data: prData, isLoading: isPrLoading } = usePullRequest(runId);
 	const pullRequest = prData?.pullRequest ?? null;
@@ -182,6 +183,17 @@ export function PullRequestLayout({ runId }: { runId: string }) {
 		if (viewedFileCount > 0) return `${viewedFileCount}/${totalFileCount} viewed`;
 		return String(totalFileCount);
 	})();
+
+	const handleSelectCommentThread = useCallback(
+		(threadId: string) => {
+			void navigate({
+				to: "/runs/$runId/files",
+				params: { runId },
+				search: { thread: threadId },
+			});
+		},
+		[navigate, runId],
+	);
 
 	// Page-scroll tabs read `--content-top` (topbar + sticky nav) to pin their own
 	// sticky content; the contained index instead measures the content area height
@@ -279,7 +291,7 @@ export function PullRequestLayout({ runId }: { runId: string }) {
 						))}
 					</div>
 					<div className="flex shrink-0 items-center gap-3 text-sm @xl:gap-6">
-						<SendToCodexButton />
+						<SendToCodexButton onSelectThread={handleSelectCommentThread} />
 						<CollapseExpandAllButton />
 						<Popover>
 							<Tooltip>
