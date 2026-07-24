@@ -338,7 +338,7 @@ As soon as the command prints `Listening on <URL>`, send the user a commentary u
 
 Run `stagereview show` as a persistent foreground command and wait for it to finish. Do not background-and-forget the process. A tool may return a session ID while the foreground command remains active; in that case, keep waiting on that same session until the command exits.
 
-The command exits when the user clicks **Send to Codex** or presses Ctrl+C. Every graceful completion prints a pretty-printed JSON envelope to stdout. Submitted feedback keeps Stage's annotation shape inside a Plannotator-style outer handoff:
+The command exits when the user clicks **Send to Codex** or presses Ctrl+C. Every graceful completion prints a pretty-printed JSON envelope to stdout. Submitted feedback keeps Stage's annotation shape inside the Stage/Codex review handoff envelope:
 
 ```json
 {

@@ -48,7 +48,7 @@ describe("buildReviewFeedbackExport", () => {
 		});
 	});
 
-	it("emits Plannotator-compatible Markdown and raw annotations", () => {
+	it("emits the Stage/Codex review handoff with raw annotations", () => {
 		const result = buildReviewFeedbackExport("working tree", [
 			makeThread({
 				id: "deletion",
