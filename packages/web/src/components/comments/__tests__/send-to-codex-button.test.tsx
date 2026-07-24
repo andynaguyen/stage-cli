@@ -1,17 +1,32 @@
 // @vitest-environment happy-dom
 
-import type { CommentThread } from "@stagereview/types/comments";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { Comment, CommentThread } from "@stagereview/types/comments";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { toast } from "@/components/ui/sonner";
 import { makeWrapper } from "@/lib/__tests__/fixtures";
 import { CommentThreadsProvider } from "@/lib/comment-threads-context";
 import { SendToCodexButton } from "../send-to-codex-button";
+
+vi.mock("@/components/ui/sonner", () => ({
+	toast: { success: vi.fn(), error: vi.fn(), dismiss: vi.fn() },
+}));
 
 afterEach(() => {
 	cleanup();
 	vi.unstubAllGlobals();
 	vi.clearAllMocks();
 });
+
+function makeComment(id: string, body: string): Comment {
+	return {
+		id,
+		body,
+		authorId: "local",
+		createdAt: "2026-07-24T10:00:00.000Z",
+		updatedAt: "2026-07-24T10:00:00.000Z",
+	};
+}
 
 function makeThread(over: Partial<CommentThread> = {}): CommentThread {
 	return {
@@ -23,15 +38,7 @@ function makeThread(over: Partial<CommentThread> = {}): CommentThread {
 		resolvedAt: null,
 		createdAt: "2026-07-24T10:00:00.000Z",
 		updatedAt: "2026-07-24T10:00:00.000Z",
-		comments: [
-			{
-				id: "comment-1",
-				body: "Please change this",
-				authorId: "local",
-				createdAt: "2026-07-24T10:00:00.000Z",
-				updatedAt: "2026-07-24T10:00:00.000Z",
-			},
-		],
+		comments: [makeComment("comment-1", "Please change this")],
 		...over,
 	};
 }
@@ -84,23 +91,59 @@ describe("SendToCodexButton", () => {
 		expect(button.hasAttribute("disabled")).toBe(true);
 	});
 
-	it("opens a confirmation with the unresolved count without submitting", async () => {
+	it("previews every comment from unresolved threads without submitting", async () => {
 		renderButton(
 			[
-				makeThread(),
-				makeThread({ id: "thread-2", filePath: "src/other.ts" }),
-				makeThread({ id: "thread-3", resolvedAt: "2026-07-24T11:00:00.000Z" }),
+				makeThread({
+					startLine: 4,
+					endLine: 6,
+					comments: [
+						makeComment("comment-1", "Please change this"),
+						makeComment("comment-2", "Also update the test"),
+					],
+				}),
+				makeThread({
+					id: "thread-2",
+					filePath: "src/other.ts",
+					comments: [makeComment("comment-3", "Handle the empty state")],
+				}),
+				makeThread({
+					id: "thread-3",
+					resolvedAt: "2026-07-24T11:00:00.000Z",
+					comments: [makeComment("comment-4", "This is already resolved")],
+				}),
 			],
-			async () => jsonResponse({ threadCount: 2, commentCount: 2 }),
+			async () => jsonResponse({ threadCount: 2, commentCount: 3 }),
 		);
 
-		const button = await screen.findByRole("button", { name: "Send to Codex" });
+		const trigger = await screen.findByRole("button", { name: "Send to Codex" });
 
-		fireEvent.click(button);
+		fireEvent.click(trigger);
 
 		expect(await screen.findByText("Send review to Codex")).toBeTruthy();
-		expect(screen.getByText("Pending comments")).toBeTruthy();
-		expect(screen.getByText("2")).toBeTruthy();
+		expect(
+			screen.queryByText("Codex will receive every unresolved comment thread in this review."),
+		).toBeNull();
+		expect(screen.queryByText("Stage closes after they are sent.")).toBeNull();
+		expect(screen.queryByText("Pending comments")).toBeNull();
+
+		const commentsTrigger = screen.getByRole("button", { name: "Expand comments (3)" });
+		expect(within(commentsTrigger).getByText("Comments")).toBeTruthy();
+		expect(within(commentsTrigger).getByText("3")).toBeTruthy();
+		expect(screen.queryByText("Please change this")).toBeNull();
+
+		fireEvent.click(commentsTrigger);
+
+		expect(screen.getByRole("button", { name: "Collapse comments (3)" })).toBeTruthy();
+		expect(screen.getByText("Please change this")).toBeTruthy();
+		expect(screen.getByText("Also update the test")).toBeTruthy();
+		expect(screen.getByText("Handle the empty state")).toBeTruthy();
+		expect(screen.getByText("Lines 4–6")).toBeTruthy();
+		expect(screen.queryByText("This is already resolved")).toBeNull();
+
+		const cancel = screen.getByRole("button", { name: "Cancel" });
+		expect(cancel.parentElement?.className).toContain("justify-between");
+		expect(cancel.parentElement?.firstElementChild).toBe(cancel);
 		expect(postCount()).toBe(0);
 	});
 
@@ -116,7 +159,7 @@ describe("SendToCodexButton", () => {
 		expect(postCount()).toBe(0);
 	});
 
-	it("prevents repeat confirmation while sending and after success", async () => {
+	it("keeps CTAs stable, closes the popover, and toasts after success", async () => {
 		let finishSubmission = (_response: Response) => {};
 		const pending = new Promise<Response>((resolve) => {
 			finishSubmission = resolve;
@@ -128,13 +171,19 @@ describe("SendToCodexButton", () => {
 		const confirm = getConfirmationButton(trigger);
 
 		fireEvent.click(confirm);
-		await waitFor(() => expect(confirm.textContent).toContain("Sending…"));
+		await waitFor(() => expect(confirm.hasAttribute("disabled")).toBe(true));
+		expect(confirm.textContent).toContain("Send to Codex");
+		expect(trigger.textContent).toContain("Send to Codex");
+		expect(screen.queryByText("Sending…")).toBeNull();
 		expect(confirm.hasAttribute("disabled")).toBe(true);
 
 		finishSubmission(jsonResponse({ threadCount: 1, commentCount: 1 }));
-		await waitFor(() => expect(confirm.textContent).toContain("Sent — closing Stage"));
-		expect(confirm.hasAttribute("disabled")).toBe(true);
-		fireEvent.click(confirm);
+		await waitFor(() => expect(screen.queryByText("Send review to Codex")).toBeNull());
+		expect(trigger.textContent).toContain("Send to Codex");
+		expect(trigger.hasAttribute("disabled")).toBe(true);
+		expect(vi.mocked(toast.success)).toHaveBeenCalledWith("Comments sent to Codex");
+
+		fireEvent.click(trigger);
 		expect(postCount()).toBe(1);
 	});
 
@@ -156,7 +205,8 @@ describe("SendToCodexButton", () => {
 		expect(confirm.hasAttribute("disabled")).toBe(false);
 
 		fireEvent.click(confirm);
-		await waitFor(() => expect(confirm.textContent).toContain("Sent — closing Stage"));
+		await waitFor(() => expect(screen.queryByText("Send review to Codex")).toBeNull());
+		expect(vi.mocked(toast.success)).toHaveBeenCalledWith("Comments sent to Codex");
 		expect(submissions).toBe(2);
 	});
 });
