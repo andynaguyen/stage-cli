@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import type { StageDb } from "../db/client.js";
 import { chapterRun } from "../db/schema/index.js";
 import { type GitHubRepo, parseGitHubRepo } from "../github/index.js";
+import { SCOPE_KIND, type Scope } from "../schema.js";
 import type { RouteHandler, RouteParams } from "../server.js";
 import { writeJson } from "./json.js";
 
@@ -10,10 +11,12 @@ type Res = Parameters<RouteHandler>[1];
 type Req = Parameters<RouteHandler>[0];
 
 export interface RunRepo {
+	runId: string;
 	repoRoot: string;
 	originUrl: string | null;
 	/** PR this run targets (`--pr`), or null to fall back to the checked-out branch's PR. */
 	prNumber: number | null;
+	scope: Scope;
 }
 
 /** Resolve a run's repo context, writing the matching error response on failure. */
@@ -35,7 +38,34 @@ export function resolveRun(db: StageDb, params: RouteParams, res: Res): RunRepo 
 		});
 		return null;
 	}
-	return { repoRoot, originUrl: run.originUrl, prNumber: run.prNumber };
+	const scope: Scope | null =
+		run.scopeKind === SCOPE_KIND.COMMITTED
+			? {
+					kind: SCOPE_KIND.COMMITTED,
+					baseSha: run.baseSha,
+					headSha: run.headSha,
+					mergeBaseSha: run.mergeBaseSha,
+				}
+			: run.workingTreeRef
+				? {
+						kind: SCOPE_KIND.WORKING_TREE,
+						ref: run.workingTreeRef,
+						baseSha: run.baseSha,
+						headSha: run.headSha,
+						mergeBaseSha: run.mergeBaseSha,
+					}
+				: null;
+	if (scope === null) {
+		writeJson(res, 500, { error: "Working-tree run is missing its review ref" });
+		return null;
+	}
+	return {
+		runId: run.id,
+		repoRoot,
+		originUrl: run.originUrl,
+		prNumber: run.prNumber,
+		scope,
+	};
 }
 
 export function requireRepo(run: RunRepo, res: Res): GitHubRepo | null {
