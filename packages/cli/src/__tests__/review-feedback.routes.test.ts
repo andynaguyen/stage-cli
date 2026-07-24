@@ -1,0 +1,138 @@
+import fs from "node:fs/promises";
+import http from "node:http";
+import os from "node:os";
+import path from "node:path";
+import type { CommentThread } from "@stagereview/types/comments";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { closeDb, getDb } from "../db/client.js";
+import { ReviewFeedbackSession } from "../review-feedback.js";
+import { commentRoutes } from "../routes/comments.js";
+import { reviewFeedbackRoutes } from "../routes/review-feedback.js";
+import { insertChaptersFile } from "../runs/import-chapters.js";
+import { LOOPBACK_HOST, type ServerHandle, startServer } from "../server.js";
+import { makeFixture, makeRepoContext } from "./fixtures.js";
+
+let tmpDir: string;
+let dbPath: string;
+let webDist: string;
+let handle: ServerHandle | undefined;
+let session: ReviewFeedbackSession;
+
+beforeEach(async () => {
+	tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "stage-cli-feedback-"));
+	dbPath = path.join(tmpDir, "db.sqlite");
+	webDist = path.join(tmpDir, "web-dist");
+	await fs.mkdir(webDist);
+	await fs.writeFile(path.join(webDist, "index.html"), "<html></html>");
+	closeDb();
+	session = new ReviewFeedbackSession();
+});
+
+afterEach(async () => {
+	if (handle !== undefined) await handle.close();
+	handle = undefined;
+	closeDb();
+	await fs.rm(tmpDir, { recursive: true, force: true });
+});
+
+async function start(): Promise<number> {
+	const db = getDb({ dbPath });
+	handle = await startServer({
+		webDistPath: webDist,
+		routes: [...commentRoutes(db), ...reviewFeedbackRoutes(db, session)],
+	});
+	return handle.port;
+}
+
+function seedRun(): string {
+	return insertChaptersFile(getDb({ dbPath }), makeFixture(), makeRepoContext()).runId;
+}
+
+interface JsonResponse {
+	status: number;
+	body: unknown;
+}
+
+function send(
+	port: number,
+	method: string,
+	requestPath: string,
+	body?: unknown,
+	headers?: Record<string, string>,
+): Promise<JsonResponse> {
+	const payload = body === undefined ? "" : JSON.stringify(body);
+	return new Promise((resolve, reject) => {
+		const request = http.request(
+			{
+				host: LOOPBACK_HOST,
+				port,
+				method,
+				path: requestPath,
+				headers: {
+					"Content-Type": "application/json",
+					"Content-Length": Buffer.byteLength(payload),
+					...headers,
+				},
+			},
+			(response) => {
+				const chunks: Buffer[] = [];
+				response.on("data", (chunk: Buffer) => chunks.push(chunk));
+				response.on("end", () => {
+					const text = Buffer.concat(chunks).toString("utf8");
+					resolve({ status: response.statusCode ?? 0, body: text ? JSON.parse(text) : null });
+				});
+			},
+		);
+		request.on("error", reject);
+		if (payload.length > 0) request.write(payload);
+		request.end();
+	});
+}
+
+async function createThread(port: number, runId: string, body: string): Promise<CommentThread> {
+	const response = await send(port, "POST", `/api/runs/${runId}/comment-threads`, {
+		filePath: "src/example.ts",
+		side: "additions",
+		startLine: 4,
+		endLine: 4,
+		body,
+	});
+	expect(response.status).toBe(201);
+	return response.body as CommentThread;
+}
+
+describe("review feedback API", () => {
+	it("enforces same-origin before resolving a run", async () => {
+		const port = await start();
+		const response = await send(port, "POST", "/api/runs/unknown/feedback", undefined, {
+			Origin: "http://evil.example",
+		});
+
+		expect(response.status).toBe(403);
+	});
+
+	it("returns 404 for an unknown run and 409 for an empty run", async () => {
+		const runId = seedRun();
+		const port = await start();
+
+		expect((await send(port, "POST", "/api/runs/unknown/feedback")).status).toBe(404);
+		expect((await send(port, "POST", `/api/runs/${runId}/feedback`)).status).toBe(409);
+	});
+
+	it("submits unresolved comments once and reports both counts", async () => {
+		const runId = seedRun();
+		const port = await start();
+		const open = await createThread(port, runId, "Submit me");
+		await send(port, "POST", `/api/comment-threads/${open.id}/replies`, { body: "Reply" });
+		const resolved = await createThread(port, runId, "Hide me");
+		await send(port, "PATCH", `/api/comment-threads/${resolved.id}`, { resolved: true });
+
+		const first = await send(port, "POST", `/api/runs/${runId}/feedback`);
+		expect(first).toEqual({ status: 200, body: { threadCount: 1, commentCount: 2 } });
+		await expect(session.feedback).resolves.toContain("Submit me\n\nReply");
+		await expect(session.feedback).resolves.not.toContain("Hide me");
+
+		const repeated = await send(port, "POST", `/api/runs/${runId}/feedback`);
+		expect(repeated.status).toBe(409);
+	});
+});
