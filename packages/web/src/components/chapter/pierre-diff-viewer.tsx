@@ -29,6 +29,7 @@ import {
 	findDraftAt,
 	isSameAnchor,
 	readDraftBody,
+	toSelectedLineRange,
 	upsertDraft,
 	writeDraftBody,
 } from "@/lib/comment-drafts";
@@ -202,6 +203,7 @@ export function PierreDiffViewer({
 	);
 	// In-progress comment composers, one per anchor row — several can be open at once.
 	const [drafts, setDrafts] = useState<DraftState[]>([]);
+	const [activeDraft, setActiveDraft] = useState<CommentDraft | null>(null);
 	// Composer text indexed by anchor, kept in a ref so typing never rebuilds the
 	// annotation list and a composer's text survives the remount that opening or
 	// closing another draft can trigger.
@@ -223,11 +225,15 @@ export function PierreDiffViewer({
 	// same (side, endLine) adopts the new range's startLine rather than duplicating it.
 	const openDraft = useCallback((anchor: CommentDraft) => {
 		setDrafts((prev) => upsertDraft(prev, anchor));
+		setActiveDraft(anchor);
 	}, []);
 
 	const closeDraft = useCallback((draft: CommentDraft) => {
 		clearDraftBody(draftBodiesRef.current, draft.side, draft.endLine);
 		setDrafts((prev) => prev.filter((d) => !isSameAnchor(d, draft.side, draft.endLine)));
+		setActiveDraft((current) =>
+			current && isSameAnchor(current, draft.side, draft.endLine) ? null : current,
+		);
 	}, []);
 
 	const handleCreateComment = useCallback(
@@ -284,6 +290,9 @@ export function PierreDiffViewer({
 						// biome-ignore lint/a11y/noStaticElementInteractions: hover only highlights the anchored lines, it's not an interactive control
 						<div
 							key={thread.id}
+							id={`comment-thread-${thread.id}`}
+							tabIndex={-1}
+							className="rounded-xl outline-none focus:ring-2 focus:ring-primary/60 focus:ring-offset-2 focus:ring-offset-background"
 							onMouseEnter={() => handleThreadMouseEnter(thread)}
 							onMouseLeave={handleThreadMouseLeave}
 						>
@@ -295,18 +304,21 @@ export function PierreDiffViewer({
 						// for a different anchor when a draft is added/removed. Key the composer
 						// by its anchor to force a clean remount (re-reading its own draft text)
 						// instead of inheriting another composer's in-progress state.
-						<CommentForm
-							key={`draft-${draft.side}-${draft.endLine}`}
-							label="Comment"
-							placeholder="Leave a comment…"
-							error={draft.error}
-							initialBody={readDraftBody(draftBodiesRef.current, draft.side, draft.endLine)}
-							onBodyChange={(body) =>
-								writeDraftBody(draftBodiesRef.current, draft.side, draft.endLine, body)
-							}
-							onSubmit={(body) => handleCreateComment(draft, body)}
-							onCancel={() => closeDraft(draft)}
-						/>
+						<div onFocusCapture={() => setActiveDraft(draft)}>
+							<CommentForm
+								key={`draft-${draft.side}-${draft.endLine}`}
+								label="Comment"
+								placeholder="Leave a comment…"
+								error={draft.error}
+								lineRange={draft}
+								initialBody={readDraftBody(draftBodiesRef.current, draft.side, draft.endLine)}
+								onBodyChange={(body) =>
+									writeDraftBody(draftBodiesRef.current, draft.side, draft.endLine, body)
+								}
+								onSubmit={(body) => handleCreateComment(draft, body)}
+								onCancel={() => closeDraft(draft)}
+							/>
+						</div>
 					)}
 				</div>
 			);
@@ -403,8 +415,12 @@ export function PierreDiffViewer({
 
 	const sharedProps = {
 		options,
-		// Hover-highlight takes precedence over any parent-controlled selection.
-		selectedLines: hoverLines ?? selectedLinesProp ?? null,
+		// Hover-highlight takes precedence, followed by the composer the reviewer is using.
+		selectedLines:
+			hoverLines ??
+			(activeDraft ? toSelectedLineRange(activeDraft) : null) ??
+			selectedLinesProp ??
+			null,
 		lineAnnotations,
 		renderAnnotation,
 		renderGutterUtility,

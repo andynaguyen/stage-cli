@@ -1,26 +1,19 @@
 import {
 	CommentBodySchema,
-	type Comment as CommentDto,
-	type CommentThread as CommentThreadDto,
 	CreateCommentThreadBodySchema,
 	ResolveThreadBodySchema,
 } from "@stagereview/types/comments";
-import { asc, eq, inArray } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import type { StageDb } from "../db/client.js";
 import { LOCAL_USER_ID } from "../db/local-user.js";
-import {
-	type CommentRow,
-	type CommentThreadRow,
-	chapterRun,
-	comment,
-	commentThread,
-} from "../db/schema/index.js";
-import { deriveScopeKey } from "../runs/scope-key.js";
+import { type CommentRow, comment, commentThread } from "../db/schema/index.js";
 import type { Route } from "../server.js";
+import { CommentThreadQuery, toComment, toCommentThread } from "./comment-thread-query.js";
 import { parseJsonBody, writeJson } from "./json.js";
 import { enforceSameOrigin } from "./pull-request-shared.js";
 
 export function commentRoutes(db: StageDb): Route[] {
+	const comments = new CommentThreadQuery(db);
 	return [
 		// Threads are anchored to a diff scope, not a run, so they survive re-imports
 		// of the same diff. We resolve the run's scope key and key every query off it.
@@ -28,12 +21,12 @@ export function commentRoutes(db: StageDb): Route[] {
 			method: "GET",
 			pattern: "/api/runs/:runId/comment-threads",
 			handler: (_req, res, params) => {
-				const scopeKey = resolveRunScopeKey(db, params.runId);
-				if (scopeKey === null) {
+				const threads = comments.listForRun(params.runId);
+				if (threads === null) {
 					writeJson(res, 404, { error: `Run ${params.runId} not found` });
 					return;
 				}
-				writeJson(res, 200, listThreads(db, scopeKey));
+				writeJson(res, 200, threads);
 			},
 		},
 		{
@@ -41,7 +34,7 @@ export function commentRoutes(db: StageDb): Route[] {
 			pattern: "/api/runs/:runId/comment-threads",
 			handler: async (req, res, params) => {
 				if (!enforceSameOrigin(req, res)) return;
-				const scopeKey = resolveRunScopeKey(db, params.runId);
+				const scopeKey = comments.findScopeKeyForRun(params.runId);
 				if (scopeKey === null) {
 					writeJson(res, 404, { error: `Run ${params.runId} not found` });
 					return;
@@ -68,7 +61,7 @@ export function commentRoutes(db: StageDb): Route[] {
 						.returning()
 						.all();
 					if (!commentRow) throw new Error("comment insert returned no row");
-					return toThreadDto(threadRow, [commentRow]);
+					return toCommentThread(threadRow, [commentRow]);
 				});
 				writeJson(res, 201, created);
 			},
@@ -98,7 +91,7 @@ export function commentRoutes(db: StageDb): Route[] {
 						.set({ updatedAt: new Date() })
 						.where(eq(commentThread.id, threadId))
 						.run();
-					return toCommentDto(commentRow);
+					return toComment(commentRow);
 				});
 				writeJson(res, 201, created);
 			},
@@ -126,7 +119,7 @@ export function commentRoutes(db: StageDb): Route[] {
 					writeJson(res, 404, { error: `Thread ${threadId} not found` });
 					return;
 				}
-				writeJson(res, 200, toThreadDto(updated, threadComments(db, threadId)));
+				writeJson(res, 200, toCommentThread(updated, threadComments(db, threadId)));
 			},
 		},
 		{
@@ -168,7 +161,7 @@ export function commentRoutes(db: StageDb): Route[] {
 					writeJson(res, 404, { error: `Comment ${commentId} not found` });
 					return;
 				}
-				writeJson(res, 200, toCommentDto(updated));
+				writeJson(res, 200, toComment(updated));
 			},
 		},
 		{
@@ -208,54 +201,6 @@ export function commentRoutes(db: StageDb): Route[] {
 	];
 }
 
-function resolveRunScopeKey(db: StageDb, runId: string | undefined): string | null {
-	if (!runId) return null;
-	const [run] = db
-		.select({
-			scopeKind: chapterRun.scopeKind,
-			workingTreeRef: chapterRun.workingTreeRef,
-			baseSha: chapterRun.baseSha,
-			headSha: chapterRun.headSha,
-			mergeBaseSha: chapterRun.mergeBaseSha,
-		})
-		.from(chapterRun)
-		.where(eq(chapterRun.id, runId))
-		.limit(1)
-		.all();
-	if (!run) return null;
-	return deriveScopeKey(run);
-}
-
-function listThreads(db: StageDb, scopeKey: string): CommentThreadDto[] {
-	const threads = db
-		.select()
-		.from(commentThread)
-		.where(eq(commentThread.scopeKey, scopeKey))
-		.orderBy(asc(commentThread.createdAt))
-		.all();
-	if (threads.length === 0) return [];
-
-	const comments = db
-		.select()
-		.from(comment)
-		.where(
-			inArray(
-				comment.threadId,
-				threads.map((t) => t.id),
-			),
-		)
-		.orderBy(asc(comment.createdAt))
-		.all();
-
-	const byThread = new Map<string, CommentRow[]>();
-	for (const c of comments) {
-		const list = byThread.get(c.threadId);
-		if (list) list.push(c);
-		else byThread.set(c.threadId, [c]);
-	}
-	return threads.map((t) => toThreadDto(t, byThread.get(t.id) ?? []));
-}
-
 function threadComments(db: StageDb, threadId: string): CommentRow[] {
 	return db
 		.select()
@@ -274,28 +219,4 @@ function threadExists(db: StageDb, threadId: string): boolean {
 			.limit(1)
 			.all().length > 0
 	);
-}
-
-function toThreadDto(thread: CommentThreadRow, comments: CommentRow[]): CommentThreadDto {
-	return {
-		id: thread.id,
-		filePath: thread.filePath,
-		side: thread.side,
-		startLine: thread.startLine,
-		endLine: thread.endLine,
-		resolvedAt: thread.resolvedAt?.toISOString() ?? null,
-		createdAt: thread.createdAt.toISOString(),
-		updatedAt: thread.updatedAt.toISOString(),
-		comments: comments.map(toCommentDto),
-	};
-}
-
-function toCommentDto(row: CommentRow): CommentDto {
-	return {
-		id: row.id,
-		body: row.body,
-		authorId: row.authorId,
-		createdAt: row.createdAt.toISOString(),
-		updatedAt: row.updatedAt.toISOString(),
-	};
 }

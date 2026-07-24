@@ -1,5 +1,15 @@
 import { formatDistanceToNow } from "date-fns";
 
+export interface LineRange {
+	startLine: number;
+	endLine: number;
+}
+
+export function formatLineRange({ startLine, endLine }: LineRange): string {
+	if (startLine === endLine) return `L${startLine}`;
+	return `L${startLine}-${endLine}`;
+}
+
 /** "opened 3 days ago" — matches hosted Stage's relative-time rendering. */
 export function formatTimeAgo(dateString: string): string {
 	return formatDistanceToNow(new Date(dateString), { addSuffix: true });

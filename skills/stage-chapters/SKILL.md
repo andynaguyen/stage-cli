@@ -1,6 +1,6 @@
 ---
 name: stage-chapters
-description: Generate Stage chapters for the current local git branch and open them in a browser for review.
+description: Generate Stage chapters, open them for review, and address comments returned from Stage.
 user-invocable: true
 ---
 
@@ -324,7 +324,7 @@ Field rules:
 | `prologue.focusAreas[].severity` | One of: `critical`, `high`, `medium`, `info` |
 | `prologue.complexity.level` | One of: `low`, `medium`, `high`, `very-high` |
 
-## Step 6 — Display generated chapters
+## Step 6 — Display generated chapters and wait for feedback
 
 Hand the file to `stagereview`:
 
@@ -334,4 +334,48 @@ stagereview show "$AGENT_OUTPUT"
 
 `stagereview show` auto-detects the agent output format, independently computes the scope and "Other changes" chapter for filtered files, validates the JSON, inserts the run into the local SQLite database, boots a loopback HTTP server, and opens the browser.
 
-**The command blocks until the user presses Ctrl+C.** If your harness requires non-blocking execution, run it in the background (e.g., `run_in_background` in Claude Code). Invoke it as the final command in the workflow.
+As soon as the command prints `Listening on <URL>`, send the user a commentary update containing a clickable link to that exact review URL. Always provide the URL, even when the browser opens automatically, and do not wait for the command to exit.
+
+Run `stagereview show` as a persistent foreground command and wait for it to finish. Do not background-and-forget the process. A tool may return a session ID while the foreground command remains active; in that case, keep waiting on that same session until the command exits.
+
+The command exits when the user clicks **Send to Codex** or presses Ctrl+C. Every graceful completion prints a pretty-printed JSON envelope to stdout. Submitted feedback keeps Stage's annotation shape inside the Stage/Codex review handoff envelope:
+
+```json
+{
+  "gitRef": "working tree",
+  "approved": false,
+  "feedback": "# Code Review Feedback\n\n...",
+  "annotations": [
+    {
+      "type": "comment",
+      "filePath": "src/example.ts",
+      "lineStart": 10,
+      "lineEnd": 15,
+      "side": "new",
+      "text": "Handle the null case before dereferencing."
+    }
+  ]
+}
+```
+
+Exiting without feedback via Ctrl+C prints the same envelope with empty feedback:
+
+```json
+{
+  "gitRef": "working tree",
+  "approved": false,
+  "feedback": "",
+  "annotations": []
+}
+```
+
+Parse stdout as JSON. When `feedback` begins with `# Code Review Feedback`, continue in this same task:
+
+1. Inspect the referenced code before making changes.
+2. Address every submitted comment.
+3. Run verification appropriate to the changes.
+4. Explain any comment you did not apply, citing concrete code evidence.
+
+Use `annotations` for exact file and line anchors; use the Markdown `feedback` field as the agent-readable review. Stage emits one annotation per authored comment, so replies share their thread's anchor and include a `threadId`.
+
+When `feedback` is empty and `annotations` is empty, do not invent approval, requested changes, or review feedback. Treat it as the user exiting Stage without submitting comments.
