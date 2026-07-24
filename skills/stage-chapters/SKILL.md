@@ -334,9 +334,11 @@ stagereview show "$AGENT_OUTPUT"
 
 `stagereview show` auto-detects the agent output format, independently computes the scope and "Other changes" chapter for filtered files, validates the JSON, inserts the run into the local SQLite database, boots a loopback HTTP server, and opens the browser.
 
+As soon as the command prints `Listening on <URL>`, send the user a commentary update containing a clickable link to that exact review URL. Always provide the URL, even when the browser opens automatically, and do not wait for the command to exit.
+
 Run `stagereview show` as a persistent foreground command and wait for it to finish. Do not background-and-forget the process. A tool may return a session ID while the foreground command remains active; in that case, keep waiting on that same session until the command exits.
 
-The command exits when the user clicks **Send to Codex** or **Close Stage**, or presses Ctrl+C. Every graceful completion prints a pretty-printed JSON envelope to stdout. Submitted feedback keeps Stage's annotation shape inside a Plannotator-style outer handoff:
+The command exits when the user clicks **Send to Codex** or presses Ctrl+C. Every graceful completion prints a pretty-printed JSON envelope to stdout. Submitted feedback keeps Stage's annotation shape inside a Plannotator-style outer handoff:
 
 ```json
 {
@@ -356,7 +358,7 @@ The command exits when the user clicks **Send to Codex** or **Close Stage**, or 
 }
 ```
 
-Closing without feedback, including Ctrl+C, prints the same envelope with empty feedback:
+Exiting without feedback via Ctrl+C prints the same envelope with empty feedback:
 
 ```json
 {
@@ -376,4 +378,4 @@ Parse stdout as JSON. When `feedback` begins with `# Code Review Feedback`, cont
 
 Use `annotations` for exact file and line anchors; use the Markdown `feedback` field as the agent-readable review. Stage emits one annotation per authored comment, so replies share their thread's anchor and include a `threadId`.
 
-When `feedback` is empty and `annotations` is empty, do not invent approval, requested changes, or review feedback. Treat it as the user closing Stage without submitting comments.
+When `feedback` is empty and `annotations` is empty, do not invent approval, requested changes, or review feedback. Treat it as the user exiting Stage without submitting comments.
