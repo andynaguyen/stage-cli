@@ -1,6 +1,7 @@
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { BookOpen, FileText, FoldVertical, Settings2, UnfoldVertical } from "lucide-react";
 import { type CSSProperties, useCallback, useMemo, useRef, useState } from "react";
+import { CloseStageButton } from "@/components/comments/close-stage-button";
 import { SendToCodexButton } from "@/components/comments/send-to-codex-button";
 import { DiffSettingsForm } from "@/components/diff/diff-settings-form";
 import { PullRequestHeader } from "@/components/pull-request/pull-request-header";
@@ -279,7 +280,10 @@ export function PullRequestLayout({ runId }: { runId: string }) {
 						))}
 					</div>
 					<div className="flex shrink-0 items-center gap-3 text-sm @xl:gap-6">
-						<SendToCodexButton runId={runId} />
+						<div className="flex items-center gap-1">
+							<CloseStageButton />
+							<SendToCodexButton runId={runId} />
+						</div>
 						<CollapseExpandAllButton />
 						<Popover>
 							<Tooltip>
