@@ -70,4 +70,32 @@ describe("streamAgentQuery", () => {
 			selection: null,
 		});
 	});
+
+	it("rejects a stream that closes without a terminal event", async () => {
+		const body = new ReadableStream<Uint8Array>({
+			start(controller) {
+				controller.enqueue(
+					new TextEncoder().encode('data: {"type":"text_delta","text":"partial"}\n\n'),
+				);
+				controller.close();
+			},
+		});
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => new Response(body, { status: 200 })),
+		);
+		const events: AgentStreamEvent[] = [];
+
+		await expect(
+			streamAgentQuery(
+				"run-1",
+				"123e4567-e89b-12d3-a456-426614174000",
+				"Explain this",
+				null,
+				(event) => events.push(event),
+				new AbortController().signal,
+			),
+		).rejects.toThrow("ended before completing");
+		expect(events).toEqual([{ type: "text_delta", text: "partial" }]);
+	});
 });

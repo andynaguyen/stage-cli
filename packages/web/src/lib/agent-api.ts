@@ -133,6 +133,13 @@ export async function streamAgentQuery(
 	const reader = response.body.getReader();
 	const decoder = new TextDecoder();
 	let buffer = "";
+	let completed = false;
+	const emitPayload = (payload: string) => {
+		const raw: unknown = JSON.parse(payload);
+		const event = AgentStreamEventSchema.parse(raw);
+		if (event.type === "turn_completed") completed = true;
+		onEvent(event);
+	};
 
 	while (true) {
 		const result = await reader.read();
@@ -140,8 +147,7 @@ export async function streamAgentQuery(
 		const parsed = parseSseChunk(buffer);
 		buffer = parsed.remainder;
 		for (const payload of parsed.payloads) {
-			const raw: unknown = JSON.parse(payload);
-			onEvent(AgentStreamEventSchema.parse(raw));
+			emitPayload(payload);
 		}
 		if (result.done) break;
 	}
@@ -149,8 +155,11 @@ export async function streamAgentQuery(
 	if (buffer.trim().length > 0) {
 		const parsed = parseSseChunk(`${buffer}\n\n`);
 		for (const payload of parsed.payloads) {
-			const raw: unknown = JSON.parse(payload);
-			onEvent(AgentStreamEventSchema.parse(raw));
+			emitPayload(payload);
 		}
+	}
+
+	if (!completed) {
+		throw new AgentApiError("Ask Agent ended before completing the response", 502);
 	}
 }
