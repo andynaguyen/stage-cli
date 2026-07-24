@@ -1,6 +1,6 @@
 ---
 name: stage-chapters
-description: Generate Stage chapters for the current local git branch and open them in a browser for review.
+description: Generate Stage chapters, open them for review, and address comments returned from Stage.
 user-invocable: true
 ---
 
@@ -324,7 +324,7 @@ Field rules:
 | `prologue.focusAreas[].severity` | One of: `critical`, `high`, `medium`, `info` |
 | `prologue.complexity.level` | One of: `low`, `medium`, `high`, `very-high` |
 
-## Step 6 — Display generated chapters
+## Step 6 — Display generated chapters and wait for feedback
 
 Hand the file to `stagereview`:
 
@@ -334,4 +334,19 @@ stagereview show "$AGENT_OUTPUT"
 
 `stagereview show` auto-detects the agent output format, independently computes the scope and "Other changes" chapter for filtered files, validates the JSON, inserts the run into the local SQLite database, boots a loopback HTTP server, and opens the browser.
 
-**The command blocks until the user presses Ctrl+C.** If your harness requires non-blocking execution, run it in the background (e.g., `run_in_background` in Claude Code). Invoke it as the final command in the workflow.
+Run `stagereview show` as a persistent foreground command and wait for it to finish. Do not background-and-forget the process. A tool may return a session ID while the foreground command remains active; in that case, keep waiting on that same session until the command exits.
+
+The command exits when the user either clicks **Send to Codex** in Stage or presses Ctrl+C. When feedback is submitted, stdout contains a Markdown document beginning with:
+
+```markdown
+# Stage Review Feedback
+```
+
+When that header is present, continue in this same task:
+
+1. Inspect the referenced code before making changes.
+2. Address every submitted comment.
+3. Run verification appropriate to the changes.
+4. Explain any comment you did not apply, citing concrete code evidence.
+
+When the command exits without the feedback header, do not invent approval, requested changes, or review feedback. Treat it as the user closing Stage without submitting comments.
