@@ -15,20 +15,23 @@ import { CommentThreadQuery } from "./comment-thread-query.js";
 import { writeJson } from "./json.js";
 import { enforceSameOrigin } from "./pull-request-shared.js";
 
-export function reviewFeedbackRoutes(db: StageDb, session: ReviewFeedbackSession): Route[] {
+export function reviewFeedbackRoutes(
+	db: StageDb,
+	runId: string,
+	session: ReviewFeedbackSession,
+): Route[] {
 	const comments = new CommentThreadQuery(db);
 
 	return [
 		{
 			method: "POST",
-			pattern: "/api/runs/:runId/feedback",
-			handler: async (req, res, params) => {
+			pattern: "/api/feedback",
+			handler: async (req, res) => {
 				if (!enforceSameOrigin(req, res)) return;
 
-				const threads = comments.listUnresolvedForRun(params.runId);
+				const threads = comments.listUnresolvedForRun(runId);
 				if (threads === null) {
-					writeJson(res, 404, { error: `Run ${params.runId} not found` });
-					return;
+					throw new Error(`Active review run ${runId} not found`);
 				}
 				if (threads.length === 0) {
 					writeJson(res, 409, { error: "No unresolved review feedback is available" });

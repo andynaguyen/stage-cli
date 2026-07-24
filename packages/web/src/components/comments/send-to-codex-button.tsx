@@ -14,11 +14,11 @@ import { toast } from "@/components/ui/sonner";
 import { useCommentThreadsContext } from "@/lib/comment-threads-context";
 import { useReviewFeedback } from "@/lib/use-review-feedback";
 
-export function SendToCodexButton({ runId }: { runId: string }) {
+export function SendToCodexButton() {
 	const [isOpen, setIsOpen] = useState(false);
 	const [areCommentsOpen, setAreCommentsOpen] = useState(false);
 	const { threads, isLoading } = useCommentThreadsContext();
-	const submission = useReviewFeedback(runId);
+	const submission = useReviewFeedback();
 	const unresolvedThreads = threads.filter((thread) => thread.resolvedAt === null);
 	const commentCount = unresolvedThreads.reduce(
 		(count, thread) => count + thread.comments.length,

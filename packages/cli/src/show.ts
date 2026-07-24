@@ -40,7 +40,7 @@ export async function show(jsonPath: string, options: DiffScopeOptions): Promise
 				...runRoutes(db),
 				...viewStateRoutes(db),
 				...commentRoutes(db),
-				...reviewFeedbackRoutes(db, feedbackSession),
+				...reviewFeedbackRoutes(db, runId, feedbackSession),
 				...viewerRoutes(),
 				...diffRoutes(db),
 				...pullRequestRoutes(db),

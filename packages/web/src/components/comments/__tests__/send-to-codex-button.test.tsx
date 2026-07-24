@@ -62,7 +62,7 @@ function renderButton(threads: CommentThread[], submit: () => Promise<Response>)
 	const { Wrapper } = makeWrapper();
 	return render(
 		<CommentThreadsProvider runId="run-1">
-			<SendToCodexButton runId="run-1" />
+			<SendToCodexButton />
 		</CommentThreadsProvider>,
 		{ wrapper: Wrapper },
 	);

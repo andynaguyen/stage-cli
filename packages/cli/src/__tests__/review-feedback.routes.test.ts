@@ -9,6 +9,7 @@ import { ReviewFeedbackSession } from "../review-feedback.js";
 import { commentRoutes } from "../routes/comments.js";
 import { reviewFeedbackRoutes } from "../routes/review-feedback.js";
 import { insertChaptersFile } from "../runs/import-chapters.js";
+import type { ChaptersFile } from "../schema.js";
 import { LOOPBACK_HOST, type ServerHandle, startServer } from "../server.js";
 import { makeFixture, makeRepoContext } from "./fixtures.js";
 
@@ -35,17 +36,17 @@ afterEach(async () => {
 	await fs.rm(tmpDir, { recursive: true, force: true });
 });
 
-async function start(): Promise<number> {
+async function start(runId: string): Promise<number> {
 	const db = getDb({ dbPath });
 	handle = await startServer({
 		webDistPath: webDist,
-		routes: [...commentRoutes(db), ...reviewFeedbackRoutes(db, session)],
+		routes: [...commentRoutes(db), ...reviewFeedbackRoutes(db, runId, session)],
 	});
 	return handle.port;
 }
 
-function seedRun(): string {
-	return insertChaptersFile(getDb({ dbPath }), makeFixture(), makeRepoContext()).runId;
+function seedRun(over: Partial<ChaptersFile> = {}): string {
+	return insertChaptersFile(getDb({ dbPath }), makeFixture(over), makeRepoContext()).runId;
 }
 
 interface JsonResponse {
@@ -103,33 +104,31 @@ async function createThread(port: number, runId: string, body: string): Promise<
 
 describe("review feedback API", () => {
 	it("enforces same-origin before resolving a run", async () => {
-		const port = await start();
+		const runId = seedRun();
+		const port = await start(runId);
 		const headers = {
 			Origin: "http://evil.example",
 		};
 
-		expect(
-			(await send(port, "POST", "/api/runs/unknown/feedback", undefined, headers)).status,
-		).toBe(403);
+		expect((await send(port, "POST", "/api/feedback", undefined, headers)).status).toBe(403);
 	});
 
-	it("returns 404 for an unknown run and 409 for an empty run", async () => {
+	it("returns 409 when the active run has no unresolved comments", async () => {
 		const runId = seedRun();
-		const port = await start();
+		const port = await start(runId);
 
-		expect((await send(port, "POST", "/api/runs/unknown/feedback")).status).toBe(404);
-		expect((await send(port, "POST", `/api/runs/${runId}/feedback`)).status).toBe(409);
+		expect((await send(port, "POST", "/api/feedback")).status).toBe(409);
 	});
 
 	it("submits unresolved comments once and reports both counts", async () => {
 		const runId = seedRun();
-		const port = await start();
+		const port = await start(runId);
 		const open = await createThread(port, runId, "Submit me");
 		await send(port, "POST", `/api/comment-threads/${open.id}/replies`, { body: "Reply" });
 		const resolved = await createThread(port, runId, "Hide me");
 		await send(port, "PATCH", `/api/comment-threads/${resolved.id}`, { resolved: true });
 
-		const first = await send(port, "POST", `/api/runs/${runId}/feedback`);
+		const first = await send(port, "POST", "/api/feedback");
 		expect(first).toEqual({ status: 200, body: { threadCount: 1, commentCount: 2 } });
 		const result = await session.result;
 		expect(result).toMatchObject({
@@ -143,7 +142,35 @@ describe("review feedback API", () => {
 		expect(result.feedback).toContain("Submit me\n\nReply");
 		expect(result.feedback).not.toContain("Hide me");
 
-		const repeated = await send(port, "POST", `/api/runs/${runId}/feedback`);
+		const repeated = await send(port, "POST", "/api/feedback");
 		expect(repeated.status).toBe(409);
+	});
+
+	it("submits only the run bound to the active review session", async () => {
+		const inactiveRunId = seedRun({
+			scope: {
+				kind: "committed",
+				baseSha: "1".repeat(40),
+				headSha: "2".repeat(40),
+				mergeBaseSha: "1".repeat(40),
+			},
+		});
+		const activeRunId = seedRun({
+			scope: {
+				kind: "committed",
+				baseSha: "3".repeat(40),
+				headSha: "4".repeat(40),
+				mergeBaseSha: "3".repeat(40),
+			},
+		});
+		const port = await start(activeRunId);
+		await createThread(port, inactiveRunId, "Do not submit");
+		await createThread(port, activeRunId, "Submit active review");
+
+		expect((await send(port, "POST", "/api/feedback")).status).toBe(200);
+
+		const result = await session.result;
+		expect(result.feedback).toContain("Submit active review");
+		expect(result.feedback).not.toContain("Do not submit");
 	});
 });

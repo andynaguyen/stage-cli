@@ -5,10 +5,10 @@ import {
 import { useMutation } from "@tanstack/react-query";
 import { jsonFetch } from "./use-view-state";
 
-export function useReviewFeedback(runId: string) {
+export function useReviewFeedback() {
 	return useMutation<ReviewFeedbackResponse, Error>({
 		mutationFn: async () => {
-			const raw = await jsonFetch<unknown>(`/api/runs/${encodeURIComponent(runId)}/feedback`, {
+			const raw = await jsonFetch<unknown>("/api/feedback", {
 				method: "POST",
 			});
 			return ReviewFeedbackResponseSchema.parse(raw);
