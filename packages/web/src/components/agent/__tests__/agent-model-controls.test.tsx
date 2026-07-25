@@ -106,6 +106,7 @@ describe("AgentModelControls", () => {
 		);
 
 		expect(screen.getByText("Codex")).not.toBeNull();
+		expect(screen.queryByText("Read only")).toBeNull();
 		expect(screen.queryByRole("combobox")).toBeNull();
 	});
 });

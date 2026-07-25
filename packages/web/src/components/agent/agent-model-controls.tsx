@@ -1,5 +1,5 @@
 import { AGENT_SERVICE_TIER_KIND, type AgentModel } from "@stagereview/types/agent";
-import { Gauge, LockKeyhole } from "lucide-react";
+import { Gauge } from "lucide-react";
 import {
 	Select,
 	SelectContent,
@@ -39,7 +39,6 @@ export function AgentModelControls({
 		return (
 			<div className="flex min-w-0 flex-1 items-center gap-1.5 text-muted-foreground text-[11px]">
 				<span className="rounded-md border bg-muted/30 px-2 py-1">{providerLabel}</span>
-				<ReadOnlyLabel />
 			</div>
 		);
 	}
@@ -116,17 +115,6 @@ export function AgentModelControls({
 					<TooltipContent>{fastTier.description}</TooltipContent>
 				</Tooltip>
 			)}
-
-			<ReadOnlyLabel />
 		</div>
-	);
-}
-
-function ReadOnlyLabel() {
-	return (
-		<span className="inline-flex h-7 items-center gap-1 rounded-md border bg-muted/30 px-2 text-muted-foreground text-[11px]">
-			<LockKeyhole className="size-3" />
-			Read only
-		</span>
 	);
 }

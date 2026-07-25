@@ -185,7 +185,7 @@ function AskAgentPanel({ width, panelRef, resizeHandleProps }: AskAgentPanelProp
 					{...resizeHandleProps}
 				/>
 				<PanelHeader />
-				<div className="min-h-0 flex-1 overflow-y-auto">{body}</div>
+				<div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto">{body}</div>
 				{isAvailable && <AgentPermissionCards />}
 				<AgentComposer />
 			</aside>
