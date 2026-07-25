@@ -98,7 +98,7 @@ export function AgentComposer() {
 	};
 
 	const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-		if (event.key !== "Enter" || (!event.metaKey && !event.ctrlKey)) return;
+		if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
 		event.preventDefault();
 		submit();
 	};
@@ -180,7 +180,7 @@ export function AgentComposer() {
 									<ArrowUp className="size-4" />
 								</Button>
 							</TooltipTrigger>
-							<TooltipContent>Send with ⌘ Enter</TooltipContent>
+							<TooltipContent>Send with Enter</TooltipContent>
 						</Tooltip>
 					)}
 				</div>
