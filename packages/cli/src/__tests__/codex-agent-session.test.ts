@@ -193,6 +193,22 @@ describe("Codex agent session", () => {
 		expect(process.terminated).toBe(true);
 	});
 
+	it("streams turn events received before the turn start response", async () => {
+		const { session, process } = await createSession();
+		const eventsPromise = collectEvents(session.query("Summarize this review"));
+		await vi.waitFor(() => expect(process.messagesWithMethod("turn/start")).toHaveLength(1));
+		const turnRequest = process.messageWithMethod("turn/start");
+
+		emitFinalAnswer(process, "turn-1", "answer-1", "The review adds Ask Agent.");
+		process.emit({ id: turnRequest.id, result: { turn: { id: "turn-1" } } });
+
+		await expect(eventsPromise).resolves.toEqual([
+			{ type: "text_delta", text: "The review adds Ask Agent." },
+			{ type: "turn_completed", outcome: "completed" },
+		]);
+		await session.dispose();
+	});
+
 	it("reuses one thread for follow-up turns", async () => {
 		const { session, process } = await createSession();
 		const { eventsPromise: firstEvents } = await beginTurn(
@@ -351,13 +367,13 @@ describe("Codex agent session", () => {
 		await aborting;
 		await expect(firstEvents).resolves.toEqual([{ type: "turn_completed", outcome: "stopped" }]);
 
-		emitFinalAnswer(process, "turn-1", "late-answer", "Late output");
 		const { eventsPromise: secondEvents } = await beginTurn(
 			session,
 			process,
 			"Try again",
 			"turn-2",
 		);
+		emitFinalAnswer(process, "turn-1", "late-answer", "Late output");
 		emitFinalAnswer(process, "turn-2", "answer-2", "Fresh output");
 		await expect(secondEvents).resolves.toEqual([
 			{ type: "text_delta", text: "Fresh output" },

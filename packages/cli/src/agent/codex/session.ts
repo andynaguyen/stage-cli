@@ -24,20 +24,15 @@ import {
 	TurnStartResponseSchema,
 } from "./protocol.js";
 
-const MAX_BUFFERED_MESSAGES = 512;
-const MAX_BUFFERED_REQUESTS = 32;
 const MAX_ACTIVITY_LABEL_LENGTH = 240;
 const MAX_ERROR_OUTPUT_LENGTH = 2000;
 
 interface ActiveTurn {
-	generation: number;
 	queue: AsyncEventQueue<AgentStreamEvent>;
 	turnId: string | null;
 	startPromise: Promise<void> | null;
 	aborted: boolean;
 	interruptSent: boolean;
-	bufferedNotifications: CodexNotification[];
-	bufferedRequests: CodexServerRequest[];
 	agentMessagePhases: Map<string, "commentary" | "final_answer" | null>;
 }
 
@@ -61,7 +56,7 @@ export class CodexAgentSession implements AgentSession {
 	private readonly removeServerRequestListener: () => void;
 	private readonly removeFatalListener: () => void;
 	private readonly pendingApprovals = new Map<CodexRequestId, true>();
-	private generation = 0;
+	private readonly retiredTurnIds = new Set<string>();
 	private active: ActiveTurn | null = null;
 	private disposed = false;
 
@@ -110,14 +105,11 @@ export class CodexAgentSession implements AgentSession {
 		if (this.active) throw new Error("An Ask Agent turn is already running");
 
 		const state: ActiveTurn = {
-			generation: ++this.generation,
 			queue: new AsyncEventQueue<AgentStreamEvent>(),
 			turnId: null,
 			startPromise: null,
 			aborted: false,
 			interruptSent: false,
-			bufferedNotifications: [],
-			bufferedRequests: [],
 			agentMessagePhases: new Map(),
 		};
 		this.active = state;
@@ -131,14 +123,10 @@ export class CodexAgentSession implements AgentSession {
 	async abort(): Promise<void> {
 		const state = this.active;
 		if (!state) return;
-		state.aborted = true;
-		state.queue.push({
+		this.stopTurn(state, {
 			type: "turn_completed",
 			outcome: AGENT_TURN_OUTCOME.STOPPED,
 		});
-		state.queue.close();
-		this.declinePendingApprovals();
-		this.declineBufferedRequests(state);
 
 		if (state.startPromise) {
 			try {
@@ -148,7 +136,6 @@ export class CodexAgentSession implements AgentSession {
 			}
 		}
 		await this.interrupt(state);
-		if (this.active === state) this.active = null;
 	}
 
 	async respondToPermission(
@@ -169,16 +156,11 @@ export class CodexAgentSession implements AgentSession {
 		this.disposed = true;
 		const state = this.active;
 		if (state) {
-			state.aborted = true;
-			state.queue.push({
+			this.stopTurn(state, {
 				type: "turn_completed",
 				outcome: AGENT_TURN_OUTCOME.STOPPED,
 			});
-			state.queue.close();
-			this.declineBufferedRequests(state);
-			this.active = null;
 		}
-		this.declinePendingApprovals();
 		this.removeNotificationListener();
 		this.removeServerRequestListener();
 		this.removeFatalListener();
@@ -202,17 +184,8 @@ export class CodexAgentSession implements AgentSession {
 			state.turnId = response.turn.id;
 
 			if (state.aborted) {
-				this.declineBufferedRequests(state);
-				await this.interrupt(state);
+				this.retiredTurnIds.add(response.turn.id);
 				return;
-			}
-			if (this.active !== state) return;
-
-			for (const notification of state.bufferedNotifications.splice(0)) {
-				this.processNotification(state, notification);
-			}
-			for (const request of state.bufferedRequests.splice(0)) {
-				this.processServerRequest(state, request);
 			}
 		} catch (error) {
 			if (state.aborted || this.active !== state) return;
@@ -227,30 +200,12 @@ export class CodexAgentSession implements AgentSession {
 	private handleNotification(notification: CodexNotification): void {
 		const state = this.active;
 		if (!state || state.aborted) return;
-		if (state.turnId === null) {
-			if (state.bufferedNotifications.length >= MAX_BUFFERED_MESSAGES) {
-				this.finishWithError(
-					state,
-					"protocol_overflow",
-					"Codex emitted too many events before starting the turn",
-				);
-				return;
-			}
-			state.bufferedNotifications.push(notification);
-			return;
-		}
-		this.processNotification(state, notification);
-	}
-
-	private processNotification(state: ActiveTurn, notification: CodexNotification): void {
-		if (this.active !== state || state.aborted || state.turnId === null) return;
 
 		if (notification.method === "item/agentMessage/delta") {
 			const parsed = AgentMessageDeltaNotificationSchema.safeParse(notification.params);
 			if (
 				parsed.success &&
-				parsed.data.threadId === this.threadId &&
-				parsed.data.turnId === state.turnId &&
+				this.acceptsTurnMessage(parsed.data.threadId, parsed.data.turnId) &&
 				state.agentMessagePhases.get(parsed.data.itemId) !== "commentary"
 			) {
 				state.queue.push({ type: "text_delta", text: parsed.data.delta });
@@ -260,11 +215,7 @@ export class CodexAgentSession implements AgentSession {
 
 		if (notification.method === "item/started" || notification.method === "item/completed") {
 			const parsed = ItemNotificationSchema.safeParse(notification.params);
-			if (
-				!parsed.success ||
-				parsed.data.threadId !== this.threadId ||
-				parsed.data.turnId !== state.turnId
-			) {
+			if (!parsed.success || !this.acceptsTurnMessage(parsed.data.threadId, parsed.data.turnId)) {
 				return;
 			}
 			const { item } = parsed.data;
@@ -303,21 +254,21 @@ export class CodexAgentSession implements AgentSession {
 			if (
 				parsed.success &&
 				!parsed.data.willRetry &&
-				parsed.data.threadId === this.threadId &&
-				parsed.data.turnId === state.turnId
+				this.acceptsTurnMessage(parsed.data.threadId, parsed.data.turnId)
 			) {
-				this.finishWithError(state, "provider_error", parsed.data.error.message);
+				this.finishWithError(
+					state,
+					"provider_error",
+					parsed.data.error.message,
+					parsed.data.turnId,
+				);
 			}
 			return;
 		}
 
 		if (notification.method === "turn/completed") {
 			const parsed = TurnCompletedNotificationSchema.safeParse(notification.params);
-			if (
-				!parsed.success ||
-				parsed.data.threadId !== this.threadId ||
-				parsed.data.turn.id !== state.turnId
-			) {
+			if (!parsed.success || !this.acceptsTurnMessage(parsed.data.threadId, parsed.data.turn.id)) {
 				return;
 			}
 			if (parsed.data.turn.status === "failed") {
@@ -325,6 +276,7 @@ export class CodexAgentSession implements AgentSession {
 					state,
 					"turn_failed",
 					parsed.data.turn.error?.message ?? "Codex could not complete the turn",
+					parsed.data.turn.id,
 				);
 				return;
 			}
@@ -332,29 +284,13 @@ export class CodexAgentSession implements AgentSession {
 				parsed.data.turn.status === "interrupted"
 					? AGENT_TURN_OUTCOME.STOPPED
 					: AGENT_TURN_OUTCOME.COMPLETED;
-			this.finish(state, { type: "turn_completed", outcome });
+			this.finish(state, { type: "turn_completed", outcome }, parsed.data.turn.id);
 		}
 	}
 
 	private handleServerRequest(request: CodexServerRequest): void {
 		const state = this.active;
 		if (!state || state.aborted) {
-			this.rejectServerRequest(request);
-			return;
-		}
-		if (state.turnId === null) {
-			if (state.bufferedRequests.length >= MAX_BUFFERED_REQUESTS) {
-				this.rejectServerRequest(request);
-				return;
-			}
-			state.bufferedRequests.push(request);
-			return;
-		}
-		this.processServerRequest(state, request);
-	}
-
-	private processServerRequest(state: ActiveTurn, request: CodexServerRequest): void {
-		if (this.active !== state || state.aborted || state.turnId === null) {
 			this.rejectServerRequest(request);
 			return;
 		}
@@ -365,7 +301,7 @@ export class CodexAgentSession implements AgentSession {
 				this.client.respondError(request.id, -32602, "Invalid command approval request");
 				return;
 			}
-			if (parsed.data.threadId !== this.threadId || parsed.data.turnId !== state.turnId) {
+			if (!this.acceptsTurnMessage(parsed.data.threadId, parsed.data.turnId)) {
 				this.client.respond(request.id, { decision: "decline" });
 				return;
 			}
@@ -383,11 +319,7 @@ export class CodexAgentSession implements AgentSession {
 		if (request.method === "item/fileChange/requestApproval") {
 			const parsed = FileChangeApprovalRequestSchema.safeParse(request.params);
 			this.client.respond(request.id, { decision: "decline" });
-			if (
-				parsed.success &&
-				parsed.data.threadId === this.threadId &&
-				parsed.data.turnId === state.turnId
-			) {
+			if (parsed.success && this.acceptsTurnMessage(parsed.data.threadId, parsed.data.turnId)) {
 				state.queue.push({
 					type: "write_blocked",
 					message: "Stage declined a requested file change because Ask Agent is read-only.",
@@ -399,11 +331,7 @@ export class CodexAgentSession implements AgentSession {
 		if (request.method === "item/permissions/requestApproval") {
 			const parsed = PermissionsApprovalRequestSchema.safeParse(request.params);
 			this.client.respond(request.id, { permissions: {}, scope: "turn" });
-			if (
-				parsed.success &&
-				parsed.data.threadId === this.threadId &&
-				parsed.data.turnId === state.turnId
-			) {
+			if (parsed.success && this.acceptsTurnMessage(parsed.data.threadId, parsed.data.turnId)) {
 				state.queue.push({
 					type: "write_blocked",
 					message: "Stage declined broader filesystem or network access.",
@@ -430,10 +358,8 @@ export class CodexAgentSession implements AgentSession {
 		this.client.respondError(request.id, -32601, "Method not supported by Stage Ask Agent");
 	}
 
-	private declineBufferedRequests(state: ActiveTurn): void {
-		for (const request of state.bufferedRequests.splice(0)) {
-			this.rejectServerRequest(request);
-		}
+	private acceptsTurnMessage(threadId: string, turnId: string): boolean {
+		return threadId === this.threadId && !this.retiredTurnIds.has(turnId);
 	}
 
 	private declinePendingApprovals(): void {
@@ -456,21 +382,32 @@ export class CodexAgentSession implements AgentSession {
 		}
 	}
 
-	private finish(state: ActiveTurn, terminalEvent: AgentStreamEvent): void {
+	private finish(state: ActiveTurn, terminalEvent: AgentStreamEvent, turnId?: string): void {
 		if (this.active !== state) return;
+		if (turnId) this.retiredTurnIds.add(turnId);
+		this.stopTurn(state, terminalEvent);
+	}
+
+	private stopTurn(state: ActiveTurn, terminalEvent: AgentStreamEvent): void {
+		if (this.active !== state) return;
+		state.aborted = true;
+		if (state.turnId) this.retiredTurnIds.add(state.turnId);
 		this.declinePendingApprovals();
-		this.declineBufferedRequests(state);
 		state.queue.push(terminalEvent);
 		state.queue.close();
 		this.active = null;
 	}
 
-	private finishWithError(state: ActiveTurn, code: string, message: string): void {
+	private finishWithError(state: ActiveTurn, code: string, message: string, turnId?: string): void {
 		state.queue.push({ type: "error", code, message });
-		this.finish(state, {
-			type: "turn_completed",
-			outcome: AGENT_TURN_OUTCOME.FAILED,
-		});
+		this.finish(
+			state,
+			{
+				type: "turn_completed",
+				outcome: AGENT_TURN_OUTCOME.FAILED,
+			},
+			turnId,
+		);
 	}
 
 	private handleFatal(error: Error): void {
