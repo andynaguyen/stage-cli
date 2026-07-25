@@ -47,15 +47,16 @@ function EmptyState() {
 				</p>
 				<div className="mt-6 flex flex-col items-center gap-2">
 					{STARTER_PROMPTS.map(({ prompt, icon: Icon }) => (
-						<button
+						<Button
 							key={prompt}
-							type="button"
-							className="inline-flex w-fit items-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm transition-colors hover:border-primary/30 hover:bg-accent"
+							variant="outline"
+							size="sm"
+							className="h-auto w-fit px-3 py-2 font-normal"
 							onClick={() => void send(prompt)}
 						>
 							<Icon className="size-4 text-muted-foreground" />
 							{prompt}
-						</button>
+						</Button>
 					))}
 				</div>
 			</div>
