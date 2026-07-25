@@ -135,7 +135,7 @@ export function AgentModelControls({
 							<button
 								type="button"
 								aria-label="Back to agent settings"
-								className="mb-1 flex h-9 w-full items-center gap-2 border-b px-2 font-medium text-sm text-foreground outline-none hover:text-primary focus-visible:text-primary"
+								className="mb-1 flex h-9 w-full items-center gap-2 border-b px-2 font-medium text-sm text-foreground outline-none transition-colors hover:bg-accent focus-visible:bg-accent"
 								onClick={() => setView(AGENT_SETTINGS_VIEW.ROOT)}
 							>
 								<ChevronLeft className="size-4 text-muted-foreground" />
