@@ -338,7 +338,9 @@ As soon as the command prints `Listening on <URL>`, send the user a commentary u
 
 Run `stagereview show` as a persistent foreground command and wait for it to finish. Do not background-and-forget the process. A tool may return a session ID while the foreground command remains active; in that case, keep waiting on that same session until the command exits.
 
-The command exits when the user clicks **Send to Codex** or presses Ctrl+C. Every graceful completion prints a pretty-printed JSON envelope to stdout. Submitted feedback keeps Stage's annotation shape inside the Stage/Codex review handoff envelope:
+Claude Code clarification: do not launch this as a background-and-forget command. Claude receives the feedback only when the foreground command completes.
+
+The command exits when the user clicks **Send to Agent** or presses Ctrl+C. Every graceful completion prints a pretty-printed JSON envelope to stdout. The envelope returns to whichever coding agent invoked this skill, and submitted feedback keeps Stage's annotation shape inside the Stage review handoff:
 
 ```json
 {
