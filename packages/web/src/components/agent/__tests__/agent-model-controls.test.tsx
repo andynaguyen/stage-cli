@@ -35,6 +35,8 @@ const models = [balancedModel, fastModel];
 afterEach(cleanup);
 
 function renderControls(model: AgentModel, serviceTier: string | null = null) {
+	const onModelChange = vi.fn();
+	const onReasoningEffortChange = vi.fn();
 	const onServiceTierChange = vi.fn();
 	const view = render(
 		<AgentModelControls
@@ -43,22 +45,27 @@ function renderControls(model: AgentModel, serviceTier: string | null = null) {
 			selectedModel={model}
 			reasoningEffort={null}
 			serviceTier={serviceTier}
-			onModelChange={vi.fn()}
-			onReasoningEffortChange={vi.fn()}
+			onModelChange={onModelChange}
+			onReasoningEffortChange={onReasoningEffortChange}
 			onServiceTierChange={onServiceTierChange}
 		/>,
 	);
-	return { ...view, onServiceTierChange };
+	return {
+		...view,
+		onModelChange,
+		onReasoningEffortChange,
+		onServiceTierChange,
+	};
 }
 
 describe("AgentModelControls", () => {
-	it("shows controls supported by the selected model", () => {
+	it("shows compact controls supported by the selected model", () => {
 		const { rerender } = renderControls(balancedModel);
 
-		expect(screen.getByRole("combobox", { name: "Agent model" }).textContent).toContain(
+		expect(screen.getByRole("button", { name: "Choose agent model" }).textContent).toContain(
 			"Balanced model",
 		);
-		expect(screen.getByRole("combobox", { name: "Reasoning effort" }).textContent).toContain(
+		expect(screen.getByRole("button", { name: "Choose reasoning effort" }).textContent).toContain(
 			"Auto",
 		);
 		expect(screen.queryByRole("switch", { name: "Fast service tier" })).toBeNull();
@@ -75,12 +82,38 @@ describe("AgentModelControls", () => {
 				onServiceTierChange={vi.fn()}
 			/>,
 		);
-		expect(screen.getByRole("combobox", { name: "Reasoning effort" }).textContent).toContain(
+		expect(screen.getByRole("button", { name: "Choose reasoning effort" }).textContent).toContain(
 			"Medium",
 		);
 		expect(screen.getByRole("switch", { name: "Fast service tier" }).dataset.state).toBe(
 			"unchecked",
 		);
+	});
+
+	it("searches the Codex model group without locking page scroll", () => {
+		const { onModelChange } = renderControls(balancedModel);
+
+		fireEvent.click(screen.getByRole("button", { name: "Choose agent model" }));
+
+		expect(document.body.style.overflow).toBe("");
+		expect(screen.getByText("Codex")).not.toBeNull();
+		fireEvent.change(screen.getByRole("textbox", { name: "Search models" }), {
+			target: { value: "fast" },
+		});
+		fireEvent.click(screen.getByRole("button", { name: "Use Fast model" }));
+		expect(onModelChange).toHaveBeenCalledWith("fast-model");
+	});
+
+	it("offers icon-led reasoning options and maps Auto to provider defaults", () => {
+		const { onReasoningEffortChange } = renderControls(balancedModel);
+
+		fireEvent.click(screen.getByRole("button", { name: "Choose reasoning effort" }));
+		fireEvent.click(screen.getByRole("button", { name: "Use High reasoning" }));
+		expect(onReasoningEffortChange).toHaveBeenCalledWith("high");
+
+		fireEvent.click(screen.getByRole("button", { name: "Choose reasoning effort" }));
+		fireEvent.click(screen.getByRole("button", { name: "Use automatic reasoning" }));
+		expect(onReasoningEffortChange).toHaveBeenLastCalledWith(null);
 	});
 
 	it("maps the Fast toggle to the provider tier id", () => {
@@ -106,7 +139,6 @@ describe("AgentModelControls", () => {
 		);
 
 		expect(screen.getByText("Codex")).not.toBeNull();
-		expect(screen.queryByText("Read only")).toBeNull();
-		expect(screen.queryByRole("combobox")).toBeNull();
+		expect(screen.queryByRole("button", { name: "Choose agent model" })).toBeNull();
 	});
 });

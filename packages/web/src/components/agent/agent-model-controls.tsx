@@ -1,18 +1,11 @@
 import { AGENT_SERVICE_TIER_KIND, type AgentModel } from "@stagereview/types/agent";
-import { Gauge } from "lucide-react";
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/ui/select";
+import { Bot, Gauge } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-
-const REASONING_SELECTION = {
-	AUTO: "__auto__",
-} as const;
+import { cn } from "@/lib/utils";
+import { AGENT_CONTROL_CLASS } from "./agent-control-primitives";
+import { AgentModelPicker } from "./agent-model-picker";
+import { AgentReasoningPicker } from "./agent-reasoning-picker";
 
 interface AgentModelControlsProps {
 	providerLabel: string;
@@ -37,73 +30,39 @@ export function AgentModelControls({
 }: AgentModelControlsProps) {
 	if (!selectedModel || models.length === 0) {
 		return (
-			<div className="flex min-w-0 flex-1 items-center gap-1.5 text-muted-foreground text-[11px]">
-				<span className="rounded-md border bg-muted/30 px-2 py-1">{providerLabel}</span>
+			<div className="flex min-w-0 flex-1 items-center">
+				<span className={AGENT_CONTROL_CLASS}>
+					<Bot className="size-3.5 text-muted-foreground" />
+					{providerLabel}
+				</span>
 			</div>
 		);
 	}
 
 	const fastTier =
 		selectedModel.serviceTiers.find((tier) => tier.kind === AGENT_SERVICE_TIER_KIND.FAST) ?? null;
-	const defaultEffort = selectedModel.reasoningEfforts.find(
-		(effort) => effort.id === selectedModel.defaultReasoningEffort,
-	);
 
 	return (
-		<div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
-			<Select value={selectedModel.id} onValueChange={onModelChange}>
-				<SelectTrigger
-					size="sm"
-					aria-label="Agent model"
-					className="h-7 max-w-40 gap-1 border bg-muted/30 px-2 text-[11px] shadow-none"
-				>
-					<SelectValue />
-				</SelectTrigger>
-				<SelectContent align="start" position="popper" className="w-72">
-					{models.map((model) => (
-						<SelectItem key={model.id} value={model.id} description={model.description}>
-							{model.label}
-						</SelectItem>
-					))}
-				</SelectContent>
-			</Select>
-
+		<div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+			<AgentModelPicker
+				providerLabel={providerLabel}
+				models={models}
+				selectedModel={selectedModel}
+				onModelChange={onModelChange}
+			/>
 			{selectedModel.reasoningEfforts.length > 0 && (
-				<Select
-					value={reasoningEffort ?? REASONING_SELECTION.AUTO}
-					onValueChange={(value) =>
-						onReasoningEffortChange(value === REASONING_SELECTION.AUTO ? null : value)
-					}
-				>
-					<SelectTrigger
-						size="sm"
-						aria-label="Reasoning effort"
-						className="h-7 max-w-28 gap-1 border bg-muted/30 px-2 text-[11px] shadow-none"
-					>
-						<SelectValue />
-					</SelectTrigger>
-					<SelectContent align="start" position="popper" className="w-64">
-						<SelectItem
-							value={REASONING_SELECTION.AUTO}
-							description={`Use the model default${defaultEffort ? ` (${defaultEffort.label})` : ""}`}
-						>
-							Auto
-						</SelectItem>
-						{selectedModel.reasoningEfforts.map((effort) => (
-							<SelectItem key={effort.id} value={effort.id} description={effort.description}>
-								{effort.label}
-							</SelectItem>
-						))}
-					</SelectContent>
-				</Select>
+				<AgentReasoningPicker
+					selectedModel={selectedModel}
+					reasoningEffort={reasoningEffort}
+					onReasoningEffortChange={onReasoningEffortChange}
+				/>
 			)}
-
 			{fastTier && (
 				<Tooltip>
 					<TooltipTrigger asChild>
-						<div className="flex h-7 items-center gap-1.5 rounded-md border bg-muted/30 px-2 text-foreground text-[11px]">
-							<Gauge className="size-3 text-muted-foreground" />
-							Fast
+						<div className={cn(AGENT_CONTROL_CLASS, "hover:bg-background")}>
+							<Gauge className="size-3.5 text-muted-foreground" />
+							<span>Fast</span>
 							<Switch
 								size="sm"
 								aria-label="Fast service tier"

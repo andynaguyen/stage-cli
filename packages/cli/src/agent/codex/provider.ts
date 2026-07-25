@@ -52,6 +52,8 @@ function reasoningEffortLabel(id: string): string {
 	switch (id) {
 		case "minimal":
 			return "Minimal";
+		case "none":
+			return "Off";
 		case "low":
 			return "Low";
 		case "medium":
@@ -60,6 +62,10 @@ function reasoningEffortLabel(id: string): string {
 			return "High";
 		case "xhigh":
 			return "Extra high";
+		case "max":
+			return "Max";
+		case "ultra":
+			return "Ultra";
 		default:
 			return id;
 	}

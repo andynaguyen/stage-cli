@@ -64,7 +64,11 @@ class ModelCatalogProcess implements CodexAppServerProcess {
 					"fast-model",
 					"Fast model",
 					false,
-					[{ reasoningEffort: "medium", description: "Balanced reasoning" }],
+					[
+						{ reasoningEffort: "medium", description: "Balanced reasoning" },
+						{ reasoningEffort: "max", description: "Maximum reasoning" },
+						{ reasoningEffort: "ultra", description: "Ultra reasoning" },
+					],
 					[{ id: "priority", name: "Fast", description: "Lower latency" }],
 				),
 			],
@@ -235,7 +239,11 @@ describe("Codex agent provider capability", () => {
 				label: "fast-model",
 				description: "Fast model",
 				isDefault: false,
-				reasoningEfforts: [{ id: "medium", label: "Medium", description: "Balanced reasoning" }],
+				reasoningEfforts: [
+					{ id: "medium", label: "Medium", description: "Balanced reasoning" },
+					{ id: "max", label: "Max", description: "Maximum reasoning" },
+					{ id: "ultra", label: "Ultra", description: "Ultra reasoning" },
+				],
 				defaultReasoningEffort: "medium",
 				serviceTiers: [
 					{

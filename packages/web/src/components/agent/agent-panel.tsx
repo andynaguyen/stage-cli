@@ -1,5 +1,16 @@
 import { AGENT_CAPABILITY_STATUS, AGENT_PROVIDER } from "@stagereview/types/agent";
-import { AlertCircle, Bot, LoaderCircle, Plus, X } from "lucide-react";
+import {
+	AlertCircle,
+	Bot,
+	Eye,
+	FileText,
+	LoaderCircle,
+	type LucideIcon,
+	Plus,
+	Shield,
+	Workflow,
+	X,
+} from "lucide-react";
 import {
 	type CSSProperties,
 	type MouseEvent,
@@ -15,11 +26,11 @@ import { cn } from "@/lib/utils";
 import { AgentComposer, AgentPermissionCards } from "./agent-composer";
 import { AgentConversation } from "./agent-message";
 
-const STARTER_PROMPTS = [
-	"Summarize this review",
-	"Walk me through the key changes",
-	"What looks risky?",
-	"What should I review first?",
+const STARTER_PROMPTS: Array<{ prompt: string; icon: LucideIcon }> = [
+	{ prompt: "Summarize this review", icon: FileText },
+	{ prompt: "Walk me through the key changes", icon: Workflow },
+	{ prompt: "What looks risky?", icon: Shield },
+	{ prompt: "What should I review first?", icon: Eye },
 ] as const;
 
 function EmptyState() {
@@ -34,14 +45,15 @@ function EmptyState() {
 				<p className="mt-1 text-muted-foreground text-sm">
 					Your local coding agent can explain changes, trace behavior, and surface review risks.
 				</p>
-				<div className="mt-6 grid gap-2">
-					{STARTER_PROMPTS.map((prompt) => (
+				<div className="mt-6 flex flex-col items-center gap-2">
+					{STARTER_PROMPTS.map(({ prompt, icon: Icon }) => (
 						<button
 							key={prompt}
 							type="button"
-							className="rounded-lg border bg-background px-3 py-2 text-left text-sm transition-colors hover:border-primary/30 hover:bg-accent"
+							className="inline-flex w-fit items-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm transition-colors hover:border-primary/30 hover:bg-accent"
 							onClick={() => void send(prompt)}
 						>
+							<Icon className="size-4 text-muted-foreground" />
 							{prompt}
 						</button>
 					))}
