@@ -104,7 +104,7 @@ export function AgentComposer() {
 	};
 
 	return (
-		<div className="border-t bg-background p-3">
+		<div className="bg-background p-3">
 			<div
 				className={cn(
 					"rounded-xl border bg-card shadow-sm transition-colors focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10",

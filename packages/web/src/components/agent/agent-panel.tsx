@@ -113,7 +113,7 @@ function PanelHeader() {
 	const title =
 		messages.length === 0 || !capability ? "Ask Agent" : `Ask Agent · ${capability.label}`;
 	return (
-		<header className="flex h-12 shrink-0 items-center justify-between border-b px-4">
+		<header className="flex h-12 shrink-0 items-center justify-between border-b bg-card px-4">
 			<div className="min-w-0">
 				<h2 className="truncate font-medium text-sm">{title}</h2>
 			</div>
