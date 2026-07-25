@@ -10,13 +10,13 @@ import {
 } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { Markdown } from "@/components/ui/markdown";
+import { useAskAgentConversation } from "@/lib/agent-chat-context";
 import {
 	AGENT_ACTIVITY_PHASE,
 	AGENT_MESSAGE_STATUS,
 	type AgentChatActivity,
 	type AgentChatMessage,
-	useAskAgent,
-} from "@/lib/agent-chat-context";
+} from "@/lib/agent-chat-message";
 
 export function AgentSelectionLabel({ selection }: { selection: AgentSelection }) {
 	const side = selection.side === "additions" ? "new" : "old";
@@ -119,7 +119,7 @@ function UserMessage({ message }: { message: AgentChatMessage }) {
 }
 
 export function AgentConversation() {
-	const { messages } = useAskAgent();
+	const { messages } = useAskAgentConversation();
 	const endRef = useRef<HTMLDivElement>(null);
 	const lastMessage = messages.at(-1);
 

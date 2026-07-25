@@ -3,19 +3,24 @@
 import { AGENT_CAPABILITY_STATUS, AGENT_PROVIDER } from "@stagereview/types/agent";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useAskAgent } from "@/lib/agent-chat-context";
+import {
+	useAskAgentConfiguration,
+	useAskAgentConversation,
+	useAskAgentPanel,
+} from "@/lib/agent-chat-context";
 import { AgentComposer } from "../agent-composer";
 
 vi.mock("@/lib/agent-chat-context", () => ({
-	useAskAgent: vi.fn(),
+	useAskAgentConfiguration: vi.fn(),
+	useAskAgentConversation: vi.fn(),
+	useAskAgentPanel: vi.fn(),
 }));
 
 const send = vi.fn<() => Promise<void>>();
 
 beforeEach(() => {
 	send.mockResolvedValue();
-	vi.mocked(useAskAgent).mockReturnValue({
-		isOpen: true,
+	vi.mocked(useAskAgentConfiguration).mockReturnValue({
 		capability: {
 			providerId: AGENT_PROVIDER.CODEX,
 			label: "Codex",
@@ -24,27 +29,32 @@ beforeEach(() => {
 			models: [],
 		},
 		isCapabilityLoading: false,
+		models: [],
+		selectedModel: null,
+		reasoningEffort: null,
+		serviceTier: null,
+		refreshCapability: vi.fn(),
+		selectModel: vi.fn(),
+		selectReasoningEffort: vi.fn(),
+		selectServiceTier: vi.fn(),
+	});
+	vi.mocked(useAskAgentConversation).mockReturnValue({
 		messages: [],
 		pendingSelection: null,
 		pendingPermissions: [],
 		clearSelection: vi.fn(),
 		isStreaming: false,
-		focusRequest: 0,
-		models: [],
-		selectedModel: null,
-		reasoningEffort: null,
-		serviceTier: null,
-		open: vi.fn(),
-		close: vi.fn(),
-		openWithSelection: vi.fn(),
-		refreshCapability: vi.fn(),
-		selectModel: vi.fn(),
-		selectReasoningEffort: vi.fn(),
-		selectServiceTier: vi.fn(),
 		send,
 		stop: vi.fn(),
 		reset: vi.fn(),
 		respondToPermission: vi.fn(),
+	});
+	vi.mocked(useAskAgentPanel).mockReturnValue({
+		isOpen: true,
+		open: vi.fn(),
+		close: vi.fn(),
+		openWithSelection: vi.fn(),
+		composerRef: vi.fn(),
 	});
 });
 

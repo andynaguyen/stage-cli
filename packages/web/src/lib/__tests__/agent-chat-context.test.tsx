@@ -13,7 +13,13 @@ import {
 	respondToAgentPermission,
 	streamAgentQuery,
 } from "../agent-api";
-import { AskAgentProvider, useAskAgent, useOptionalAskAgentSelection } from "../agent-chat-context";
+import {
+	AskAgentProvider,
+	useAskAgentConfiguration,
+	useAskAgentConversation,
+	useAskAgentPanel,
+	useOptionalAskAgentSelection,
+} from "../agent-chat-context";
 
 vi.mock("../agent-api", () => ({
 	abortAgentSession: vi.fn(),
@@ -26,6 +32,7 @@ vi.mock("../agent-api", () => ({
 
 const SESSION_ID = "123e4567-e89b-12d3-a456-426614174000";
 let selectionConsumerRenders = 0;
+let configurationConsumerRenders = 0;
 
 function renderWithQueryClient(element: ReactElement) {
 	const queryClient = new QueryClient({
@@ -40,11 +47,27 @@ function SelectionConsumer() {
 	return null;
 }
 
+function ConfigurationConsumer() {
+	useAskAgentConfiguration();
+	configurationConsumerRenders += 1;
+	return null;
+}
+
+function FocusHarness() {
+	const { isOpen, open, composerRef } = useAskAgentPanel();
+	return (
+		<>
+			<button type="button" onClick={open}>
+				Open panel
+			</button>
+			{isOpen && <textarea ref={composerRef} aria-label="Agent question" />}
+		</>
+	);
+}
+
 function Harness() {
 	const {
 		capability,
-		messages,
-		openWithSelection,
 		refreshCapability,
 		reasoningEffort,
 		selectedModel,
@@ -52,8 +75,9 @@ function Harness() {
 		selectReasoningEffort,
 		selectServiceTier,
 		serviceTier,
-		send,
-	} = useAskAgent();
+	} = useAskAgentConfiguration();
+	const { messages, send } = useAskAgentConversation();
+	const { openWithSelection } = useAskAgentPanel();
 	return (
 		<>
 			<span>{capability?.status ?? "loading"}</span>
@@ -112,6 +136,7 @@ function Harness() {
 
 beforeEach(() => {
 	selectionConsumerRenders = 0;
+	configurationConsumerRenders = 0;
 	vi.mocked(getAgentCapabilities).mockResolvedValue({
 		providers: [
 			{
@@ -169,7 +194,7 @@ afterEach(() => {
 });
 
 describe("AskAgentProvider", () => {
-	it("does not rerender selection-only consumers for streamed message updates", async () => {
+	it("does not rerender non-conversation consumers for streamed message updates", async () => {
 		vi.mocked(streamAgentQuery).mockImplementation(
 			async (_runId, _sessionId, _question, _selection, onEvent) => {
 				onEvent({ type: "text_delta", text: "Streamed answer" });
@@ -180,10 +205,12 @@ describe("AskAgentProvider", () => {
 			<AskAgentProvider runId="run-1">
 				<Harness />
 				<SelectionConsumer />
+				<ConfigurationConsumer />
 			</AskAgentProvider>,
 		);
 		await screen.findByText(AGENT_CAPABILITY_STATUS.AVAILABLE);
 		const rendersBeforeStreaming = selectionConsumerRenders;
+		const configurationRendersBeforeStreaming = configurationConsumerRenders;
 
 		fireEvent.click(screen.getByRole("button", { name: "Ask selection" }));
 
@@ -191,6 +218,20 @@ describe("AskAgentProvider", () => {
 			expect(screen.getByTestId("messages").textContent).toContain("Streamed answer"),
 		);
 		expect(selectionConsumerRenders).toBe(rendersBeforeStreaming);
+		expect(configurationConsumerRenders).toBe(configurationRendersBeforeStreaming);
+	});
+
+	it("focuses the composer when opening mounts it", async () => {
+		renderWithQueryClient(
+			<AskAgentProvider runId="run-1">
+				<FocusHarness />
+			</AskAgentProvider>,
+		);
+
+		fireEvent.click(screen.getByRole("button", { name: "Open panel" }));
+
+		const composer = await screen.findByRole("textbox", { name: "Agent question" });
+		expect(document.activeElement).toBe(composer);
 	});
 
 	it("prevents two turns from starting in the same render", async () => {

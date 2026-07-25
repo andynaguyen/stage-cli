@@ -20,7 +20,11 @@ import {
 } from "react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useAskAgent } from "@/lib/agent-chat-context";
+import {
+	useAskAgentConfiguration,
+	useAskAgentConversation,
+	useAskAgentPanel,
+} from "@/lib/agent-chat-context";
 import { RESIZE_HANDLE_SIDE, useResizablePanel } from "@/lib/use-resizable-panel";
 import { cn } from "@/lib/utils";
 import { AgentComposer, AgentPermissionCards } from "./agent-composer";
@@ -34,7 +38,7 @@ const STARTER_PROMPTS: Array<{ prompt: string; icon: LucideIcon }> = [
 ] as const;
 
 function EmptyState() {
-	const { send } = useAskAgent();
+	const { send } = useAskAgentConversation();
 	return (
 		<div className="flex min-h-full items-center justify-center px-6 py-12">
 			<div className="w-full max-w-sm text-center">
@@ -65,7 +69,7 @@ function EmptyState() {
 }
 
 function CapabilityState() {
-	const { capability, isCapabilityLoading, refreshCapability } = useAskAgent();
+	const { capability, isCapabilityLoading, refreshCapability } = useAskAgentConfiguration();
 	if (isCapabilityLoading) {
 		return (
 			<div className="flex min-h-full items-center justify-center gap-2 text-muted-foreground text-sm">
@@ -109,7 +113,9 @@ function CapabilityState() {
 }
 
 function PanelHeader() {
-	const { capability, messages, close, reset } = useAskAgent();
+	const { capability } = useAskAgentConfiguration();
+	const { messages, reset } = useAskAgentConversation();
+	const { close } = useAskAgentPanel();
 	const title =
 		messages.length === 0 || !capability ? "Ask Agent" : `Ask Agent · ${capability.label}`;
 	return (
@@ -149,7 +155,9 @@ interface AskAgentPanelProps {
 }
 
 function AskAgentPanel({ width, panelRef, resizeHandleProps }: AskAgentPanelProps) {
-	const { isOpen, close, capability, isCapabilityLoading, messages } = useAskAgent();
+	const { isOpen, close } = useAskAgentPanel();
+	const { capability, isCapabilityLoading } = useAskAgentConfiguration();
+	const { messages } = useAskAgentConversation();
 
 	useEffect(() => {
 		if (!isOpen) return;
@@ -207,7 +215,7 @@ function AskAgentPanel({ width, panelRef, resizeHandleProps }: AskAgentPanelProp
 }
 
 export function AskAgentShell({ children }: { children: ReactNode }) {
-	const { isOpen } = useAskAgent();
+	const { isOpen } = useAskAgentPanel();
 	const { width, panelRef, resizeHandleProps } = useResizablePanel<HTMLElement>({
 		minWidth: 360,
 		maxWidth: 520,

@@ -1,16 +1,20 @@
 import { AGENT_CAPABILITY_STATUS, AGENT_PERMISSION_DECISION } from "@stagereview/types/agent";
 import { ArrowUp, ShieldAlert, Square, X } from "lucide-react";
-import { type KeyboardEvent, useEffect, useRef, useState } from "react";
+import { type KeyboardEvent, useState } from "react";
 import TextareaAutosize from "react-textarea-autosize";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useAskAgent } from "@/lib/agent-chat-context";
+import {
+	useAskAgentConfiguration,
+	useAskAgentConversation,
+	useAskAgentPanel,
+} from "@/lib/agent-chat-context";
 import { cn } from "@/lib/utils";
 import { AgentSelectionLabel } from "./agent-message";
 import { AgentModelControls } from "./agent-model-controls";
 
 export function AgentPermissionCards() {
-	const { pendingPermissions, respondToPermission } = useAskAgent();
+	const { pendingPermissions, respondToPermission } = useAskAgentConversation();
 	if (pendingPermissions.length === 0) return null;
 
 	return (
@@ -66,10 +70,6 @@ export function AgentComposer() {
 	const {
 		capability,
 		isCapabilityLoading,
-		pendingSelection,
-		clearSelection,
-		isStreaming,
-		focusRequest,
 		models,
 		selectedModel,
 		reasoningEffort,
@@ -77,18 +77,13 @@ export function AgentComposer() {
 		selectModel,
 		selectReasoningEffort,
 		selectServiceTier,
-		send,
-		stop,
-	} = useAskAgent();
+	} = useAskAgentConfiguration();
+	const { pendingSelection, clearSelection, isStreaming, send, stop } = useAskAgentConversation();
+	const { composerRef } = useAskAgentPanel();
 	const [question, setQuestion] = useState("");
-	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const isAvailable = capability?.status === AGENT_CAPABILITY_STATUS.AVAILABLE;
 	const providerLabel = capability?.label ?? "Agent";
 	const canSend = isAvailable && question.trim().length > 0 && !isStreaming;
-
-	useEffect(() => {
-		if (focusRequest > 0) textareaRef.current?.focus();
-	}, [focusRequest]);
 
 	const submit = () => {
 		if (!canSend) return;
@@ -127,7 +122,7 @@ export function AgentComposer() {
 					</div>
 				)}
 				<TextareaAutosize
-					ref={textareaRef}
+					ref={composerRef}
 					value={question}
 					minRows={2}
 					maxRows={8}

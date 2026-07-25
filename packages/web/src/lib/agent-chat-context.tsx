@@ -9,10 +9,12 @@ import {
 import {
 	createContext,
 	type ReactNode,
+	type RefCallback,
 	useCallback,
 	useContext,
 	useEffect,
 	useMemo,
+	useRef,
 	useState,
 } from "react";
 import {
@@ -27,34 +29,33 @@ import {
 import { AgentSessionController } from "./agent-session-controller";
 import { useAgentCapability } from "./use-agent-capability";
 
-export {
-	AGENT_ACTIVITY_PHASE,
-	AGENT_MESSAGE_STATUS,
-	type AgentChatActivity,
-	type AgentChatMessage,
-} from "./agent-chat-message";
-
-interface AskAgentContextValue {
+interface AskAgentPanelContextValue {
 	isOpen: boolean;
+	open: () => void;
+	close: () => void;
+	openWithSelection: (selection: AgentSelection) => void;
+	composerRef: RefCallback<HTMLTextAreaElement>;
+}
+
+interface AskAgentConfigurationContextValue {
 	capability: AgentProviderCapability | null;
 	isCapabilityLoading: boolean;
-	messages: AgentChatMessage[];
-	pendingSelection: AgentSelection | null;
-	pendingPermissions: AgentPendingPermission[];
-	isStreaming: boolean;
-	focusRequest: number;
 	models: AgentModel[];
 	selectedModel: AgentModel | null;
 	reasoningEffort: string | null;
 	serviceTier: string | null;
-	open: () => void;
-	close: () => void;
-	openWithSelection: (selection: AgentSelection) => void;
-	clearSelection: () => void;
 	refreshCapability: () => void;
 	selectModel: (modelId: string) => void;
 	selectReasoningEffort: (effort: string | null) => void;
 	selectServiceTier: (tier: string | null) => void;
+}
+
+interface AskAgentConversationContextValue {
+	messages: AgentChatMessage[];
+	pendingSelection: AgentSelection | null;
+	pendingPermissions: AgentPendingPermission[];
+	isStreaming: boolean;
+	clearSelection: () => void;
 	send: (question: string) => Promise<void>;
 	stop: () => void;
 	reset: () => void;
@@ -64,19 +65,24 @@ interface AskAgentContextValue {
 	) => Promise<void>;
 }
 
-const AskAgentContext = createContext<AskAgentContextValue | null>(null);
-interface AskAgentPanelContextValue {
-	isOpen: boolean;
-	open: () => void;
-}
-
 interface AskAgentSelectionContextValue {
 	openWithSelection: (selection: AgentSelection) => void;
 }
 
 const AskAgentPanelContext = createContext<AskAgentPanelContextValue | null>(null);
+const AskAgentConfigurationContext = createContext<AskAgentConfigurationContextValue | null>(null);
+const AskAgentConversationContext = createContext<AskAgentConversationContextValue | null>(null);
 const AskAgentSelectionContext = createContext<AskAgentSelectionContextValue | null>(null);
 const EMPTY_MODELS: AgentModel[] = [];
+const DEFAULT_MODEL_CONFIGURATION = {
+	reasoningEffort: null,
+	serviceTier: null,
+} as const;
+
+interface AgentModelConfiguration {
+	reasoningEffort: string | null;
+	serviceTier: string | null;
+}
 
 interface AskAgentProviderProps {
 	runId: string;
@@ -99,14 +105,12 @@ export function AskAgentProvider({
 	const [pendingSelection, setPendingSelection] = useState<AgentSelection | null>(null);
 	const [pendingPermissions, setPendingPermissions] = useState<AgentPendingPermission[]>([]);
 	const [isStreaming, setIsStreaming] = useState(false);
-	const [focusRequest, setFocusRequest] = useState(0);
 	const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
-	const [reasoningEffortByModel, setReasoningEffortByModel] = useState<Map<string, string>>(
-		() => new Map(),
-	);
-	const [serviceTierByModel, setServiceTierByModel] = useState<Map<string, string>>(
-		() => new Map(),
-	);
+	const [configurationByModel, setConfigurationByModel] = useState<
+		Map<string, AgentModelConfiguration>
+	>(() => new Map());
+	const composerElementRef = useRef<HTMLTextAreaElement | null>(null);
+	const shouldFocusComposerRef = useRef(false);
 	const sessionController = useMemo(() => new AgentSessionController(runId), [runId]);
 	const models = capability?.models ?? EMPTY_MODELS;
 	const selectedModel = useMemo(() => {
@@ -114,25 +118,46 @@ export function AskAgentProvider({
 		if (selected) return selected;
 		return models.find((model) => model.isDefault) ?? models[0] ?? null;
 	}, [models, selectedModelId]);
-	const reasoningEffort = selectedModel
-		? (reasoningEffortByModel.get(selectedModel.id) ?? null)
-		: null;
-	const serviceTier = selectedModel ? (serviceTierByModel.get(selectedModel.id) ?? null) : null;
+	const selectedConfiguration = selectedModel
+		? (configurationByModel.get(selectedModel.id) ?? DEFAULT_MODEL_CONFIGURATION)
+		: DEFAULT_MODEL_CONFIGURATION;
+	const { reasoningEffort, serviceTier } = selectedConfiguration;
 
 	useEffect(() => () => sessionController.dispose(), [sessionController]);
 
+	const composerRef = useCallback<RefCallback<HTMLTextAreaElement>>((element) => {
+		composerElementRef.current = element;
+		if (!element || !shouldFocusComposerRef.current) return;
+		shouldFocusComposerRef.current = false;
+		element.focus();
+	}, []);
+	const focusComposer = useCallback(() => {
+		const element = composerElementRef.current;
+		if (element) {
+			element.focus();
+			return;
+		}
+		shouldFocusComposerRef.current = true;
+	}, []);
+
 	const open = useCallback(() => {
 		setIsOpen(true);
-		setFocusRequest((request) => request + 1);
+		focusComposer();
+	}, [focusComposer]);
+
+	const close = useCallback(() => {
+		shouldFocusComposerRef.current = false;
+		setIsOpen(false);
 	}, []);
 
-	const close = useCallback(() => setIsOpen(false), []);
-
-	const openWithSelection = useCallback((selection: AgentSelection) => {
-		setPendingSelection(selection);
-		setIsOpen(true);
-		setFocusRequest((request) => request + 1);
-	}, []);
+	const openWithSelection = useCallback(
+		(selection: AgentSelection) => {
+			setPendingSelection(selection);
+			setIsOpen(true);
+			focusComposer();
+		},
+		[focusComposer],
+	);
 
 	const clearSelection = useCallback(() => setPendingSelection(null), []);
 
@@ -231,8 +256,8 @@ export function AskAgentProvider({
 		setPendingSelection(null);
 		setPendingPermissions([]);
 		setIsStreaming(false);
-		setFocusRequest((request) => request + 1);
-	}, [sessionController]);
+		focusComposer();
+	}, [focusComposer, sessionController]);
 
 	const selectModel = useCallback(
 		(modelId: string) => {
@@ -243,32 +268,42 @@ export function AskAgentProvider({
 		[reset, selectedModel],
 	);
 
-	const selectReasoningEffort = useCallback(
-		(effort: string | null) => {
-			if (!selectedModel || reasoningEffort === effort) return;
+	const updateModelConfiguration = useCallback(
+		(modelId: string, configuration: AgentModelConfiguration) => {
 			reset();
-			setReasoningEffortByModel((current) => {
+			setConfigurationByModel((current) => {
 				const next = new Map(current);
-				if (effort) next.set(selectedModel.id, effort);
-				else next.delete(selectedModel.id);
+				if (configuration.reasoningEffort === null && configuration.serviceTier === null) {
+					next.delete(modelId);
+				} else {
+					next.set(modelId, configuration);
+				}
 				return next;
 			});
 		},
-		[reasoningEffort, reset, selectedModel],
+		[reset],
+	);
+
+	const selectReasoningEffort = useCallback(
+		(effort: string | null) => {
+			if (!selectedModel || reasoningEffort === effort) return;
+			updateModelConfiguration(selectedModel.id, {
+				...selectedConfiguration,
+				reasoningEffort: effort,
+			});
+		},
+		[reasoningEffort, selectedConfiguration, selectedModel, updateModelConfiguration],
 	);
 
 	const selectServiceTier = useCallback(
 		(tier: string | null) => {
 			if (!selectedModel || serviceTier === tier) return;
-			reset();
-			setServiceTierByModel((current) => {
-				const next = new Map(current);
-				if (tier) next.set(selectedModel.id, tier);
-				else next.delete(selectedModel.id);
-				return next;
+			updateModelConfiguration(selectedModel.id, {
+				...selectedConfiguration,
+				serviceTier: tier,
 			});
 		},
-		[reset, selectedModel, serviceTier],
+		[selectedConfiguration, selectedModel, serviceTier, updateModelConfiguration],
 	);
 
 	const respondToPermission = useCallback(
@@ -282,84 +317,76 @@ export function AskAgentProvider({
 		[sessionController],
 	);
 
-	const panelValue = useMemo<AskAgentPanelContextValue>(() => ({ isOpen, open }), [isOpen, open]);
-	const selectionValue = useMemo<AskAgentSelectionContextValue>(
-		() => ({ openWithSelection }),
-		[openWithSelection],
+	const panelValue = useMemo<AskAgentPanelContextValue>(
+		() => ({ isOpen, open, close, openWithSelection, composerRef }),
+		[close, composerRef, isOpen, open, openWithSelection],
 	);
-
-	const value = useMemo<AskAgentContextValue>(
+	const configurationValue = useMemo<AskAgentConfigurationContextValue>(
 		() => ({
-			isOpen,
 			capability,
 			isCapabilityLoading,
-			messages,
-			pendingSelection,
-			pendingPermissions,
-			isStreaming,
-			focusRequest,
 			models,
 			selectedModel,
 			reasoningEffort,
 			serviceTier,
-			open,
-			close,
-			openWithSelection,
-			clearSelection,
 			refreshCapability,
 			selectModel,
 			selectReasoningEffort,
 			selectServiceTier,
+		}),
+		[
+			capability,
+			isCapabilityLoading,
+			models,
+			reasoningEffort,
+			refreshCapability,
+			selectedModel,
+			selectModel,
+			selectReasoningEffort,
+			selectServiceTier,
+			serviceTier,
+		],
+	);
+	const conversationValue = useMemo<AskAgentConversationContextValue>(
+		() => ({
+			messages,
+			pendingSelection,
+			pendingPermissions,
+			isStreaming,
+			clearSelection,
 			send,
 			stop,
 			reset,
 			respondToPermission,
 		}),
 		[
-			isOpen,
-			capability,
-			isCapabilityLoading,
-			messages,
-			pendingSelection,
-			pendingPermissions,
-			isStreaming,
-			focusRequest,
-			models,
-			selectedModel,
-			reasoningEffort,
-			serviceTier,
-			open,
-			close,
-			openWithSelection,
 			clearSelection,
-			refreshCapability,
-			selectModel,
-			selectReasoningEffort,
-			selectServiceTier,
-			send,
-			stop,
+			isStreaming,
+			messages,
+			pendingPermissions,
+			pendingSelection,
 			reset,
 			respondToPermission,
+			send,
+			stop,
 		],
+	);
+	const selectionValue = useMemo<AskAgentSelectionContextValue>(
+		() => ({ openWithSelection }),
+		[openWithSelection],
 	);
 
 	return (
 		<AskAgentPanelContext.Provider value={panelValue}>
-			<AskAgentSelectionContext.Provider value={selectionValue}>
-				<AskAgentContext.Provider value={value}>{children}</AskAgentContext.Provider>
-			</AskAgentSelectionContext.Provider>
+			<AskAgentConfigurationContext.Provider value={configurationValue}>
+				<AskAgentConversationContext.Provider value={conversationValue}>
+					<AskAgentSelectionContext.Provider value={selectionValue}>
+						{children}
+					</AskAgentSelectionContext.Provider>
+				</AskAgentConversationContext.Provider>
+			</AskAgentConfigurationContext.Provider>
 		</AskAgentPanelContext.Provider>
 	);
-}
-
-export function useAskAgent(): AskAgentContextValue {
-	const value = useContext(AskAgentContext);
-	if (!value) throw new Error("useAskAgent must be used within an AskAgentProvider");
-	return value;
-}
-
-export function useOptionalAskAgent(): AskAgentContextValue | null {
-	return useContext(AskAgentContext);
 }
 
 export function useAskAgentPanel(): AskAgentPanelContextValue {
@@ -368,8 +395,20 @@ export function useAskAgentPanel(): AskAgentPanelContextValue {
 	return value;
 }
 
+export function useAskAgentConfiguration(): AskAgentConfigurationContextValue {
+	const value = useContext(AskAgentConfigurationContext);
+	if (!value) {
+		throw new Error("useAskAgentConfiguration must be used within an AskAgentProvider");
+	}
+	return value;
+}
+
+export function useAskAgentConversation(): AskAgentConversationContextValue {
+	const value = useContext(AskAgentConversationContext);
+	if (!value) throw new Error("useAskAgentConversation must be used within an AskAgentProvider");
+	return value;
+}
+
 export function useOptionalAskAgentSelection(): AskAgentSelectionContextValue | null {
 	return useContext(AskAgentSelectionContext);
 }
-
-export { AGENT_PERMISSION_DECISION } from "@stagereview/types/agent";
