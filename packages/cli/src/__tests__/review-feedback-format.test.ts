@@ -57,7 +57,7 @@ describe("buildReviewFeedbackExport", () => {
 		});
 	});
 
-	it("emits the Stage/Codex review handoff with raw annotations", () => {
+	it("emits the Stage review handoff with raw annotations", () => {
 		const result = buildReviewFeedbackExport(WORKING_TREE_SCOPE, [
 			makeThread({
 				id: "deletion",

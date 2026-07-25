@@ -54,6 +54,8 @@ In your AI agent, run:
 
 This organizes your local changes into reviewable chapters and opens a browser UI. Everything happens on your machine.
 
+When you click **Address comments**, Stage hands off unresolved comments to the coding agent so it can address them in the same task.
+
 ### Options
 
 | Flag | Description |
