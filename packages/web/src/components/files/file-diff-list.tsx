@@ -102,22 +102,16 @@ export const FileDiffList = forwardRef<FileDiffListHandle, FileDiffListProps>(fu
 
 		const runWithContainer = (
 			fileContainer: HTMLElement,
-			side: DiffSide,
-			line: number,
 			isLatestRequest: () => boolean,
+			findTarget: (container: HTMLElement) => HTMLElement | null,
+			onFound?: (target: HTMLElement) => void,
 		) => {
 			const tryScroll = () => {
 				if (!isLatestRequest()) return true;
-
-				const diffsContainer = fileContainer.querySelector("diffs-container");
-				const shadowRoot = diffsContainer?.shadowRoot;
-				if (!shadowRoot) return false;
-
-				const lineEl = findRenderedDiffLine(shadowRoot, side, line);
-				if (!lineEl) return false;
-				if (lineEl.offsetParent === null) return false;
-
-				lineEl.scrollIntoView({ behavior: "smooth", block: "center" });
+				const target = findTarget(fileContainer);
+				if (!target) return false;
+				target.scrollIntoView({ behavior: "smooth", block: "center" });
+				onFound?.(target);
 				return true;
 			};
 
@@ -179,6 +173,25 @@ export const FileDiffList = forwardRef<FileDiffListHandle, FileDiffListProps>(fu
 			timeoutHandle = setTimeout(disconnectAll, SCROLL_TO_LINE_TIMEOUT_MS);
 		};
 
+		const scrollToTarget = (
+			filePath: string,
+			findTarget: (container: HTMLElement) => HTMLElement | null,
+			onFound?: (target: HTMLElement) => void,
+		) => {
+			cancelPending();
+			if (!entries.some((entry) => entry.file.path === filePath)) return;
+
+			const requestToken = scrollRequestRef.current;
+			const isLatestRequest = () => scrollRequestRef.current === requestToken;
+			if (collapseState.collapsedFiles.has(filePath)) {
+				collapseState.toggleFileCollapsed(filePath);
+			}
+
+			const fileContainer = document.getElementById(`file-${filePath}`);
+			if (!fileContainer) return;
+			runWithContainer(fileContainer, isLatestRequest, findTarget, onFound);
+		};
+
 		return {
 			cancelScrollToLine: cancelPending,
 			scrollToFile(filePath: string) {
@@ -193,55 +206,20 @@ export const FileDiffList = forwardRef<FileDiffListHandle, FileDiffListProps>(fu
 				window.scrollTo({ top });
 			},
 			scrollToLine(filePath: string, side: DiffSide, line: number) {
-				cancelPending();
-				if (!entries.some((e) => e.file.path === filePath)) return;
-
-				const requestToken = scrollRequestRef.current;
-				const isLatestRequest = () => scrollRequestRef.current === requestToken;
-
-				if (collapseState.collapsedFiles.has(filePath)) {
-					collapseState.toggleFileCollapsed(filePath);
-				}
-
-				const fileContainer = document.getElementById(`file-${filePath}`);
-				if (!fileContainer) return;
-				runWithContainer(fileContainer, side, line, isLatestRequest);
+				scrollToTarget(filePath, (fileContainer) => {
+					const shadowRoot = fileContainer.querySelector("diffs-container")?.shadowRoot;
+					if (!shadowRoot) return null;
+					const lineElement = findRenderedDiffLine(shadowRoot, side, line);
+					if (!lineElement || lineElement.offsetParent === null) return null;
+					return lineElement;
+				});
 			},
 			scrollToCommentThread(thread: CommentThreadTarget) {
-				cancelPending();
-				if (!entries.some((entry) => entry.file.path === thread.filePath)) return;
-
-				const requestToken = scrollRequestRef.current;
-				const isLatestRequest = () => scrollRequestRef.current === requestToken;
-				if (collapseState.collapsedFiles.has(thread.filePath)) {
-					collapseState.toggleFileCollapsed(thread.filePath);
-				}
-
-				const fileContainer = document.getElementById(`file-${thread.filePath}`);
-				if (!fileContainer) return;
-
-				const tryScroll = () => {
-					if (!isLatestRequest()) return true;
-					const threadElement = findCommentThreadElement(fileContainer, thread.id);
-					if (!threadElement) return false;
-					threadElement.scrollIntoView({ behavior: "smooth", block: "center" });
-					threadElement.focus({ preventScroll: true });
-					return true;
-				};
-				if (tryScroll()) return;
-
-				let retryTimer: ReturnType<typeof setInterval>;
-				let timeoutHandle: ReturnType<typeof setTimeout>;
-				const disconnectAll = () => {
-					clearInterval(retryTimer);
-					clearTimeout(timeoutHandle);
-					pendingDisconnectsRef.current.delete(disconnectAll);
-				};
-				retryTimer = setInterval(() => {
-					if (!isLatestRequest() || tryScroll()) disconnectAll();
-				}, SCROLL_TO_LINE_POLL_MS);
-				timeoutHandle = setTimeout(disconnectAll, SCROLL_TO_LINE_TIMEOUT_MS);
-				pendingDisconnectsRef.current.add(disconnectAll);
+				scrollToTarget(
+					thread.filePath,
+					(fileContainer) => findCommentThreadElement(fileContainer, thread.id),
+					(threadElement) => threadElement.focus({ preventScroll: true }),
+				);
 			},
 		};
 	}, [entries, collapseState]);

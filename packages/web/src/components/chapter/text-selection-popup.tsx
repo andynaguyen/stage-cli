@@ -1,5 +1,5 @@
 import type { SelectedLineRange } from "@pierre/diffs";
-import { MessageSquare } from "lucide-react";
+import { MessageSquare, MessageSquareCode } from "lucide-react";
 import { useLayoutEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 
@@ -8,6 +8,7 @@ interface TextSelectionPopupProps {
 	selectionRect: DOMRect;
 	lineRange: SelectedLineRange;
 	onComment: (lineRange: SelectedLineRange) => void;
+	onAskAgent?: (lineRange: SelectedLineRange) => void;
 }
 
 /**
@@ -29,6 +30,7 @@ export function TextSelectionPopup({
 	selectionRect,
 	lineRange,
 	onComment,
+	onAskAgent,
 }: TextSelectionPopupProps) {
 	const popupRef = useRef<HTMLDivElement>(null);
 
@@ -72,6 +74,19 @@ export function TextSelectionPopup({
 					<MessageSquare className="size-3" />
 					Comment
 				</button>
+				{onAskAgent && (
+					<button
+						type="button"
+						aria-label={`Ask Agent about ${rangeLabel}`}
+						className={BUTTON_CLASS}
+						// Keep the text selection from collapsing before the click resolves.
+						onMouseDown={(e) => e.preventDefault()}
+						onClick={() => onAskAgent(lineRange)}
+					>
+						<MessageSquareCode className="size-3" />
+						Ask Agent
+					</button>
+				)}
 			</div>
 		</div>,
 		document.body,

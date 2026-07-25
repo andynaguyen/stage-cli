@@ -1,3 +1,4 @@
+export * from "./agent.ts";
 export * from "./chapters.ts";
 export * from "./comments.ts";
 export * from "./diff.ts";

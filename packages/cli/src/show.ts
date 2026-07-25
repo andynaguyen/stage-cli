@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import open from "open";
+import { createAgentRuntime } from "./agent/index.js";
 import { buildOtherChangesChapter } from "./build-other-changes.js";
 import { closeDb, getDb } from "./db/client.js";
 import { parseGitDiff } from "./diff-parser.js";
@@ -8,6 +9,7 @@ import { filterFilesForLlm, loadStageIgnore } from "./filter-files.js";
 import { readRepoContext, readRepoRoot } from "./git.js";
 import { ReviewFeedbackSession } from "./review-feedback.js";
 import { runReviewSession } from "./review-lifecycle.js";
+import { agentRoutes } from "./routes/agent.js";
 import { commentRoutes } from "./routes/comments.js";
 import { diffRoutes } from "./routes/diff.js";
 import { pullRequestRoutes } from "./routes/pull-request.js";
@@ -31,12 +33,14 @@ import { LOOPBACK_HOST, startServer } from "./server.js";
 
 export async function show(jsonPath: string, options: DiffScopeOptions): Promise<void> {
 	const db = getDb();
+	const agentRuntime = createAgentRuntime();
 	try {
 		const { chaptersFile, prNumber } = await buildChaptersFile(jsonPath, options);
 		const { runId } = insertChaptersFile(db, chaptersFile, readRepoContext(), prNumber);
 		const feedbackSession = new ReviewFeedbackSession(chaptersFile.scope);
 		const handle = await startServer({
 			routes: [
+				...agentRoutes(db, agentRuntime),
 				...runRoutes(db),
 				...viewStateRoutes(db),
 				...commentRoutes(db),
@@ -53,12 +57,16 @@ export async function show(jsonPath: string, options: DiffScopeOptions): Promise
 			url,
 			signals: process,
 			openBrowser: open,
-			closeServer: handle.close,
+			closeServer: async () => {
+				await agentRuntime.dispose();
+				await handle.close();
+			},
 			closeDatabase: closeDb,
 			writeStdout: (text) => process.stdout.write(text),
 			writeStderr: (text) => process.stderr.write(text),
 		});
 	} catch (error) {
+		await agentRuntime.dispose();
 		closeDb();
 		throw error;
 	}

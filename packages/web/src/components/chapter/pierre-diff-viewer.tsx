@@ -20,6 +20,7 @@ import {
 } from "react";
 import { CommentForm } from "@/components/comments/comment-form";
 import { CommentThreadView } from "@/components/comments/comment-thread";
+import { useOptionalAskAgentSelection } from "@/lib/agent-chat-context";
 import {
 	buildCommentAnnotations,
 	type CommentDraft,
@@ -196,6 +197,7 @@ export function PierreDiffViewer({
 
 	// ---- Line-anchored comments ----
 	const comments = useCommentThreadsContext();
+	const askAgent = useOptionalAskAgentSelection();
 	const { createThread } = comments;
 	const fileThreads = useMemo(
 		() => (filePath ? (comments.threadsByFile.get(filePath) ?? []) : []),
@@ -367,6 +369,23 @@ export function PierreDiffViewer({
 		[openDraft, clearSelection],
 	);
 
+	const handleAskAgentFromSelection = useCallback(
+		(range: SelectedLineRange) => {
+			if (!askAgent || !filePath || !selectionInfo) return;
+			const selection = toSingleSideSelection(range);
+			if (!selection) return;
+			askAgent.openWithSelection({
+				filePath,
+				side: selection.side,
+				startLine: selection.startLine,
+				endLine: selection.endLine,
+				selectedText: selectionInfo.selectedText,
+			});
+			clearSelection();
+		},
+		[askAgent, clearSelection, filePath, selectionInfo],
+	);
+
 	// Dragging across the line-number gutter selects a range and opens a composer for the
 	// whole span. Several composers can be open at once, so this adds one rather than
 	// replacing any already-open draft.
@@ -451,6 +470,7 @@ export function PierreDiffViewer({
 			selectionRect={selectionInfo.rect}
 			lineRange={selectionInfo.lineRange}
 			onComment={handleCommentFromSelection}
+			onAskAgent={askAgent && filePath ? handleAskAgentFromSelection : undefined}
 		/>
 	) : null;
 

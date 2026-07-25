@@ -1,4 +1,4 @@
-import { SCOPE_KIND, type ScopeKind, type WorkingTreeRef } from "../schema.js";
+import { SCOPE_KIND, type Scope, type ScopeKind, type WorkingTreeRef } from "../schema.js";
 
 export interface ScopeKeyParts {
 	scopeKind: ScopeKind;
@@ -7,6 +7,28 @@ export interface ScopeKeyParts {
 	baseSha: string;
 	headSha: string;
 	mergeBaseSha: string;
+}
+
+export function scopeFromParts(parts: ScopeKeyParts): Scope {
+	const { scopeKind, workingTreeRef, baseSha, headSha, mergeBaseSha } = parts;
+	if (scopeKind === SCOPE_KIND.COMMITTED) {
+		return {
+			kind: SCOPE_KIND.COMMITTED,
+			baseSha,
+			headSha,
+			mergeBaseSha,
+		};
+	}
+	if (workingTreeRef === null) {
+		throw new Error("Working-tree run is missing its review ref");
+	}
+	return {
+		kind: SCOPE_KIND.WORKING_TREE,
+		ref: workingTreeRef,
+		baseSha,
+		headSha,
+		mergeBaseSha,
+	};
 }
 
 /**

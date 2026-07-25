@@ -89,7 +89,7 @@ export function ChapterSidePanel({
 					<div className="pb-2" />
 				)}
 			</div>
-			<div className="flex-1 overflow-y-auto">
+			<div className="scrollbar-thin flex-1 overflow-y-auto">
 				<ChapterSummary
 					chapter={chapter}
 					checkedKeyChangeIds={checkedKeyChangeIds}
