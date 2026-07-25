@@ -1,13 +1,10 @@
 import {
-	AGENT_CAPABILITY_STATUS,
-	AGENT_PERMISSION_DECISION,
 	AGENT_PROVIDER,
 	type AgentModel,
 	type AgentPermissionDecision,
 	type AgentProviderCapability,
 	type AgentProviderId,
 	type AgentSelection,
-	type AgentStreamEvent,
 } from "@stagereview/types/agent";
 import {
 	createContext,
@@ -16,54 +13,26 @@ import {
 	useContext,
 	useEffect,
 	useMemo,
-	useRef,
 	useState,
 } from "react";
 import {
-	abortAgentSession,
-	createAgentSession,
-	deleteAgentSession,
-	getAgentCapabilities,
-	respondToAgentPermission,
-	streamAgentQuery,
-} from "./agent-api";
+	AGENT_MESSAGE_STATUS,
+	type AgentChatMessage,
+	type AgentPendingPermission,
+	applyAgentStreamEvent,
+	describeAgentError,
+	isAgentAbortError,
+	newAgentMessage,
+} from "./agent-chat-message";
+import { AgentSessionController } from "./agent-session-controller";
+import { useAgentCapability } from "./use-agent-capability";
 
-export const AGENT_MESSAGE_STATUS = {
-	STREAMING: "streaming",
-	COMPLETED: "completed",
-	STOPPED: "stopped",
-	ERROR: "error",
-} as const;
-export type AgentMessageStatus = (typeof AGENT_MESSAGE_STATUS)[keyof typeof AGENT_MESSAGE_STATUS];
-
-export const AGENT_ACTIVITY_PHASE = {
-	STARTED: "started",
-	COMPLETED: "completed",
-} as const;
-
-export interface AgentChatActivity {
-	id: string;
-	label: string;
-	phase: (typeof AGENT_ACTIVITY_PHASE)[keyof typeof AGENT_ACTIVITY_PHASE];
-	detail: string | null;
-	exitCode: number | null;
-}
-
-export interface AgentChatMessage {
-	id: string;
-	role: "user" | "assistant";
-	content: string;
-	selection: AgentSelection | null;
-	activities: AgentChatActivity[];
-	notices: string[];
-	status: AgentMessageStatus;
-}
-
-export interface AgentPendingPermission {
-	requestId: string | number;
-	title: string;
-	description: string | null;
-}
+export {
+	AGENT_ACTIVITY_PHASE,
+	AGENT_MESSAGE_STATUS,
+	type AgentChatActivity,
+	type AgentChatMessage,
+} from "./agent-chat-message";
 
 interface AskAgentContextValue {
 	isOpen: boolean;
@@ -96,79 +65,18 @@ interface AskAgentContextValue {
 }
 
 const AskAgentContext = createContext<AskAgentContextValue | null>(null);
+interface AskAgentPanelContextValue {
+	isOpen: boolean;
+	open: () => void;
+}
+
+interface AskAgentSelectionContextValue {
+	openWithSelection: (selection: AgentSelection) => void;
+}
+
+const AskAgentPanelContext = createContext<AskAgentPanelContextValue | null>(null);
+const AskAgentSelectionContext = createContext<AskAgentSelectionContextValue | null>(null);
 const EMPTY_MODELS: AgentModel[] = [];
-
-function newMessage(
-	role: AgentChatMessage["role"],
-	content: string,
-	selection: AgentSelection | null,
-	status: AgentMessageStatus,
-): AgentChatMessage {
-	return {
-		id: crypto.randomUUID(),
-		role,
-		content,
-		selection,
-		activities: [],
-		notices: [],
-		status,
-	};
-}
-
-function describeError(error: unknown): string {
-	if (error instanceof Error) return error.message;
-	return "Ask Agent encountered an unexpected error";
-}
-
-function isAbortError(error: unknown): boolean {
-	return error instanceof DOMException && error.name === "AbortError";
-}
-
-function applyStreamEvent(message: AgentChatMessage, event: AgentStreamEvent): AgentChatMessage {
-	switch (event.type) {
-		case "text_delta":
-			return { ...message, content: message.content + event.text };
-		case "activity": {
-			const activity: AgentChatActivity = {
-				id: event.activityId,
-				label: event.label,
-				phase: event.phase,
-				detail: event.detail,
-				exitCode: event.exitCode,
-			};
-			const existingIndex = message.activities.findIndex((item) => item.id === event.activityId);
-			if (existingIndex === -1) {
-				return { ...message, activities: [...message.activities, activity] };
-			}
-			return {
-				...message,
-				activities: message.activities.map((item, index) =>
-					index === existingIndex ? activity : item,
-				),
-			};
-		}
-		case "write_blocked":
-			return { ...message, notices: [...message.notices, event.message] };
-		case "error":
-			return {
-				...message,
-				notices: [...message.notices, event.message],
-				status: AGENT_MESSAGE_STATUS.ERROR,
-			};
-		case "turn_completed":
-			return {
-				...message,
-				status:
-					event.outcome === "completed"
-						? AGENT_MESSAGE_STATUS.COMPLETED
-						: event.outcome === "stopped"
-							? AGENT_MESSAGE_STATUS.STOPPED
-							: AGENT_MESSAGE_STATUS.ERROR,
-			};
-		case "permission_request":
-			return message;
-	}
-}
 
 interface AskAgentProviderProps {
 	runId: string;
@@ -182,8 +90,11 @@ export function AskAgentProvider({
 	children,
 }: AskAgentProviderProps) {
 	const [isOpen, setIsOpen] = useState(false);
-	const [capability, setCapability] = useState<AgentProviderCapability | null>(null);
-	const [isCapabilityLoading, setIsCapabilityLoading] = useState(true);
+	const {
+		capability,
+		isLoading: isCapabilityLoading,
+		refresh: refreshCapability,
+	} = useAgentCapability(runId, providerId);
 	const [messages, setMessages] = useState<AgentChatMessage[]>([]);
 	const [pendingSelection, setPendingSelection] = useState<AgentSelection | null>(null);
 	const [pendingPermissions, setPendingPermissions] = useState<AgentPendingPermission[]>([]);
@@ -196,13 +107,7 @@ export function AskAgentProvider({
 	const [serviceTierByModel, setServiceTierByModel] = useState<Map<string, string>>(
 		() => new Map(),
 	);
-	const capabilityGenerationRef = useRef(0);
-	const sessionIdRef = useRef<string | null>(null);
-	const sessionPromiseRef = useRef<Promise<string> | null>(null);
-	const streamControllerRef = useRef<AbortController | null>(null);
-	const streamingRef = useRef(false);
-	const generationRef = useRef(0);
-	const sessionGenerationRef = useRef(0);
+	const sessionController = useMemo(() => new AgentSessionController(runId), [runId]);
 	const models = capability?.models ?? EMPTY_MODELS;
 	const selectedModel = useMemo(() => {
 		const selected = models.find((model) => model.id === selectedModelId);
@@ -214,75 +119,7 @@ export function AskAgentProvider({
 		: null;
 	const serviceTier = selectedModel ? (serviceTierByModel.get(selectedModel.id) ?? null) : null;
 
-	const refreshCapability = useCallback(() => {
-		const generation = capabilityGenerationRef.current + 1;
-		capabilityGenerationRef.current = generation;
-		setIsCapabilityLoading(true);
-		void getAgentCapabilities(runId)
-			.then(({ providers }) => {
-				if (capabilityGenerationRef.current !== generation) return;
-				const providerCapability =
-					providers.find((provider) => provider.providerId === providerId) ?? null;
-				setCapability(providerCapability);
-			})
-			.catch((error: unknown) => {
-				if (capabilityGenerationRef.current !== generation) return;
-				setCapability({
-					providerId,
-					label: "Local agent",
-					status: AGENT_CAPABILITY_STATUS.ERROR,
-					detail: describeError(error),
-					models: [],
-				});
-			})
-			.finally(() => {
-				if (capabilityGenerationRef.current === generation) setIsCapabilityLoading(false);
-			});
-	}, [providerId, runId]);
-
-	useEffect(() => {
-		refreshCapability();
-		return () => {
-			capabilityGenerationRef.current += 1;
-		};
-	}, [refreshCapability]);
-
-	useEffect(
-		() => () => {
-			generationRef.current += 1;
-			sessionGenerationRef.current += 1;
-			streamControllerRef.current?.abort();
-			const sessionId = sessionIdRef.current;
-			if (sessionId) void deleteAgentSession(runId, sessionId).catch(() => undefined);
-		},
-		[runId],
-	);
-
-	const ensureSession = useCallback(async (): Promise<string> => {
-		if (sessionIdRef.current) return sessionIdRef.current;
-		if (sessionPromiseRef.current) return sessionPromiseRef.current;
-
-		const sessionGeneration = sessionGenerationRef.current;
-		const sessionPromise = createAgentSession(runId, {
-			providerId,
-			...(selectedModel ? { model: selectedModel.id } : {}),
-			...(reasoningEffort ? { reasoningEffort } : {}),
-			...(serviceTier ? { serviceTier } : {}),
-		}).then(async (session) => {
-			if (sessionGenerationRef.current !== sessionGeneration) {
-				await deleteAgentSession(runId, session.sessionId).catch(() => undefined);
-				throw new DOMException("Session creation was superseded", "AbortError");
-			}
-			sessionIdRef.current = session.sessionId;
-			return session.sessionId;
-		});
-		sessionPromiseRef.current = sessionPromise;
-		try {
-			return await sessionPromise;
-		} finally {
-			if (sessionPromiseRef.current === sessionPromise) sessionPromiseRef.current = null;
-		}
-	}, [providerId, reasoningEffort, runId, selectedModel, serviceTier]);
+	useEffect(() => () => sessionController.dispose(), [sessionController]);
 
 	const open = useCallback(() => {
 		setIsOpen(true);
@@ -302,85 +139,81 @@ export function AskAgentProvider({
 	const send = useCallback(
 		async (question: string) => {
 			const trimmedQuestion = question.trim();
-			if (trimmedQuestion.length === 0 || streamingRef.current) return;
+			if (trimmedQuestion.length === 0) return;
 
 			const selection = pendingSelection;
-			const userMessage = newMessage(
+			const assistantMessage = newAgentMessage(
+				"assistant",
+				"",
+				null,
+				AGENT_MESSAGE_STATUS.STREAMING,
+			);
+			const assistantMessageId = assistantMessage.id;
+			const stream = sessionController.startQuery({
+				configuration: {
+					providerId,
+					...(selectedModel ? { model: selectedModel.id } : {}),
+					...(reasoningEffort ? { reasoningEffort } : {}),
+					...(serviceTier ? { serviceTier } : {}),
+				},
+				question: trimmedQuestion,
+				selection,
+				onEvent: (event) => {
+					if (event.type === "permission_request") {
+						setPendingPermissions((current) => [
+							...current.filter((item) => item.requestId !== event.requestId),
+							{
+								requestId: event.requestId,
+								title: event.title,
+								description: event.description,
+							},
+						]);
+						return;
+					}
+					setMessages((current) =>
+						current.map((message) =>
+							message.id === assistantMessageId ? applyAgentStreamEvent(message, event) : message,
+						),
+					);
+				},
+			});
+			if (!stream) return;
+			const userMessage = newAgentMessage(
 				"user",
 				trimmedQuestion,
 				selection,
 				AGENT_MESSAGE_STATUS.COMPLETED,
 			);
-			const assistantMessage = newMessage("assistant", "", null, AGENT_MESSAGE_STATUS.STREAMING);
-			const assistantMessageId = assistantMessage.id;
-			const generation = generationRef.current + 1;
-			generationRef.current = generation;
 			setMessages((current) => [...current, userMessage, assistantMessage]);
 			setPendingSelection(null);
 			setPendingPermissions([]);
-			streamingRef.current = true;
 			setIsStreaming(true);
 
-			const controller = new AbortController();
-			streamControllerRef.current = controller;
 			try {
-				const sessionId = await ensureSession();
-				await streamAgentQuery(
-					runId,
-					sessionId,
-					trimmedQuestion,
-					selection,
-					(event) => {
-						if (generationRef.current !== generation) return;
-						if (event.type === "permission_request") {
-							setPendingPermissions((current) => [
-								...current.filter((item) => item.requestId !== event.requestId),
-								{
-									requestId: event.requestId,
-									title: event.title,
-									description: event.description,
-								},
-							]);
-							return;
-						}
-						setMessages((current) =>
-							current.map((message) =>
-								message.id === assistantMessageId ? applyStreamEvent(message, event) : message,
-							),
-						);
-					},
-					controller.signal,
-				);
+				await stream;
 			} catch (error) {
-				if (generationRef.current !== generation || isAbortError(error)) return;
+				if (isAgentAbortError(error)) return;
 				setMessages((current) =>
 					current.map((message) =>
 						message.id === assistantMessageId
 							? {
 									...message,
-									notices: [...message.notices, describeError(error)],
+									notices: [...message.notices, describeAgentError(error)],
 									status: AGENT_MESSAGE_STATUS.ERROR,
 								}
 							: message,
 					),
 				);
 			} finally {
-				if (generationRef.current === generation) {
-					streamControllerRef.current = null;
-					streamingRef.current = false;
-					setIsStreaming(false);
-					setPendingPermissions([]);
-				}
+				setIsStreaming(sessionController.isStreaming);
+				if (!sessionController.isStreaming) setPendingPermissions([]);
 			}
 		},
-		[ensureSession, pendingSelection, runId],
+		[pendingSelection, providerId, reasoningEffort, selectedModel, serviceTier, sessionController],
 	);
 
 	const stop = useCallback(() => {
-		generationRef.current += 1;
-		streamControllerRef.current?.abort();
-		streamControllerRef.current = null;
-		streamingRef.current = false;
+		sessionController.stop();
 		setIsStreaming(false);
 		setPendingPermissions([]);
 		setMessages((current) =>
@@ -390,31 +223,16 @@ export function AskAgentProvider({
 					: message,
 			),
 		);
-		const sessionId = sessionIdRef.current;
-		if (sessionId) void abortAgentSession(runId, sessionId).catch(() => undefined);
-	}, [runId]);
+	}, [sessionController]);
 
 	const reset = useCallback(() => {
-		generationRef.current += 1;
-		sessionGenerationRef.current += 1;
-		streamControllerRef.current?.abort();
-		streamControllerRef.current = null;
-		streamingRef.current = false;
-		const sessionId = sessionIdRef.current;
-		sessionIdRef.current = null;
-		sessionPromiseRef.current = null;
-		if (sessionId) {
-			void abortAgentSession(runId, sessionId)
-				.catch(() => undefined)
-				.then(() => deleteAgentSession(runId, sessionId))
-				.catch(() => undefined);
-		}
+		sessionController.reset();
 		setMessages([]);
 		setPendingSelection(null);
 		setPendingPermissions([]);
 		setIsStreaming(false);
 		setFocusRequest((request) => request + 1);
-	}, [runId]);
+	}, [sessionController]);
 
 	const selectModel = useCallback(
 		(modelId: string) => {
@@ -455,14 +273,19 @@ export function AskAgentProvider({
 
 	const respondToPermission = useCallback(
 		async (requestId: string | number, decision: AgentPermissionDecision) => {
-			const sessionId = sessionIdRef.current;
-			if (!sessionId) return;
-			await respondToAgentPermission(runId, sessionId, requestId, decision);
+			const responded = await sessionController.respondToPermission(requestId, decision);
+			if (!responded) return;
 			setPendingPermissions((current) =>
 				current.filter((permission) => permission.requestId !== requestId),
 			);
 		},
-		[runId],
+		[sessionController],
+	);
+
+	const panelValue = useMemo<AskAgentPanelContextValue>(() => ({ isOpen, open }), [isOpen, open]);
+	const selectionValue = useMemo<AskAgentSelectionContextValue>(
+		() => ({ openWithSelection }),
+		[openWithSelection],
 	);
 
 	const value = useMemo<AskAgentContextValue>(
@@ -520,7 +343,13 @@ export function AskAgentProvider({
 		],
 	);
 
-	return <AskAgentContext.Provider value={value}>{children}</AskAgentContext.Provider>;
+	return (
+		<AskAgentPanelContext.Provider value={panelValue}>
+			<AskAgentSelectionContext.Provider value={selectionValue}>
+				<AskAgentContext.Provider value={value}>{children}</AskAgentContext.Provider>
+			</AskAgentSelectionContext.Provider>
+		</AskAgentPanelContext.Provider>
+	);
 }
 
 export function useAskAgent(): AskAgentContextValue {
@@ -533,4 +362,14 @@ export function useOptionalAskAgent(): AskAgentContextValue | null {
 	return useContext(AskAgentContext);
 }
 
-export { AGENT_PERMISSION_DECISION };
+export function useAskAgentPanel(): AskAgentPanelContextValue {
+	const value = useContext(AskAgentPanelContext);
+	if (!value) throw new Error("useAskAgentPanel must be used within an AskAgentProvider");
+	return value;
+}
+
+export function useOptionalAskAgentSelection(): AskAgentSelectionContextValue | null {
+	return useContext(AskAgentSelectionContext);
+}
+
+export { AGENT_PERMISSION_DECISION } from "@stagereview/types/agent";

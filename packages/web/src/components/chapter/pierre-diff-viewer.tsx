@@ -20,7 +20,7 @@ import {
 } from "react";
 import { CommentForm } from "@/components/comments/comment-form";
 import { CommentThreadView } from "@/components/comments/comment-thread";
-import { useOptionalAskAgent } from "@/lib/agent-chat-context";
+import { useOptionalAskAgentSelection } from "@/lib/agent-chat-context";
 import {
 	buildCommentAnnotations,
 	type CommentDraft,
@@ -197,7 +197,7 @@ export function PierreDiffViewer({
 
 	// ---- Line-anchored comments ----
 	const comments = useCommentThreadsContext();
-	const askAgent = useOptionalAskAgent();
+	const askAgent = useOptionalAskAgentSelection();
 	const { createThread } = comments;
 	const fileThreads = useMemo(
 		() => (filePath ? (comments.threadsByFile.get(filePath) ?? []) : []),

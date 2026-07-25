@@ -11,7 +11,7 @@ import {
 	respondToAgentPermission,
 	streamAgentQuery,
 } from "../agent-api";
-import { AskAgentProvider, useAskAgent } from "../agent-chat-context";
+import { AskAgentProvider, useAskAgent, useOptionalAskAgentSelection } from "../agent-chat-context";
 
 vi.mock("../agent-api", () => ({
 	abortAgentSession: vi.fn(),
@@ -23,6 +23,13 @@ vi.mock("../agent-api", () => ({
 }));
 
 const SESSION_ID = "123e4567-e89b-12d3-a456-426614174000";
+let selectionConsumerRenders = 0;
+
+function SelectionConsumer() {
+	useOptionalAskAgentSelection();
+	selectionConsumerRenders += 1;
+	return null;
+}
 
 function Harness() {
 	const {
@@ -95,6 +102,7 @@ function Harness() {
 }
 
 beforeEach(() => {
+	selectionConsumerRenders = 0;
 	vi.mocked(getAgentCapabilities).mockResolvedValue({
 		providers: [
 			{
@@ -152,6 +160,30 @@ afterEach(() => {
 });
 
 describe("AskAgentProvider", () => {
+	it("does not rerender selection-only consumers for streamed message updates", async () => {
+		vi.mocked(streamAgentQuery).mockImplementation(
+			async (_runId, _sessionId, _question, _selection, onEvent) => {
+				onEvent({ type: "text_delta", text: "Streamed answer" });
+				onEvent({ type: "turn_completed", outcome: "completed" });
+			},
+		);
+		render(
+			<AskAgentProvider runId="run-1">
+				<Harness />
+				<SelectionConsumer />
+			</AskAgentProvider>,
+		);
+		await screen.findByText(AGENT_CAPABILITY_STATUS.AVAILABLE);
+		const rendersBeforeStreaming = selectionConsumerRenders;
+
+		fireEvent.click(screen.getByRole("button", { name: "Ask selection" }));
+
+		await waitFor(() =>
+			expect(screen.getByTestId("messages").textContent).toContain("Streamed answer"),
+		);
+		expect(selectionConsumerRenders).toBe(rendersBeforeStreaming);
+	});
+
 	it("prevents two turns from starting in the same render", async () => {
 		let completeStream: (() => void) | null = null;
 		vi.mocked(streamAgentQuery).mockImplementation(

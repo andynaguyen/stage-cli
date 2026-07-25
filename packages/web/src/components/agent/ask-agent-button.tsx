@@ -1,10 +1,10 @@
 import { MessageSquareCode } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useAskAgent } from "@/lib/agent-chat-context";
+import { useAskAgentPanel } from "@/lib/agent-chat-context";
 
 export function AskAgentButton() {
-	const { isOpen, open } = useAskAgent();
+	const { isOpen, open } = useAskAgentPanel();
 
 	return (
 		<Tooltip>
