@@ -10,6 +10,9 @@ export type AgentRequestId = string | number;
 export interface AgentProviderSessionOptions {
 	repoRoot: string;
 	instructions: string;
+	model?: string;
+	reasoningEffort?: string;
+	serviceTier?: string;
 }
 
 export interface AgentSession {

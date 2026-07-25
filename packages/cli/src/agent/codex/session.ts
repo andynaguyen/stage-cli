@@ -54,6 +54,9 @@ export class CodexAgentSession implements AgentSession {
 	readonly providerId = AGENT_PROVIDER.CODEX;
 	private readonly client: CodexAppServerClient;
 	private readonly threadId: string;
+	private readonly model: string | undefined;
+	private readonly reasoningEffort: string | undefined;
+	private readonly serviceTier: string | undefined;
 	private readonly removeNotificationListener: () => void;
 	private readonly removeServerRequestListener: () => void;
 	private readonly removeFatalListener: () => void;
@@ -62,9 +65,16 @@ export class CodexAgentSession implements AgentSession {
 	private active: ActiveTurn | null = null;
 	private disposed = false;
 
-	private constructor(client: CodexAppServerClient, threadId: string) {
+	private constructor(
+		client: CodexAppServerClient,
+		threadId: string,
+		options: AgentProviderSessionOptions,
+	) {
 		this.client = client;
 		this.threadId = threadId;
+		this.model = options.model;
+		this.reasoningEffort = options.reasoningEffort;
+		this.serviceTier = options.serviceTier;
 		this.removeNotificationListener = client.onNotification((notification) =>
 			this.handleNotification(notification),
 		);
@@ -88,7 +98,7 @@ export class CodexAgentSession implements AgentSession {
 				threadSource: "stage",
 			});
 			const response = ThreadStartResponseSchema.parse(raw);
-			return new CodexAgentSession(client, response.thread.id);
+			return new CodexAgentSession(client, response.thread.id, options);
 		} catch (error) {
 			client.dispose();
 			throw error;
@@ -180,6 +190,9 @@ export class CodexAgentSession implements AgentSession {
 			const raw = await this.client.request("turn/start", {
 				threadId: this.threadId,
 				input: [{ type: "text", text: prompt, text_elements: [] }],
+				...(this.model ? { model: this.model } : {}),
+				...(this.reasoningEffort ? { effort: this.reasoningEffort } : {}),
+				...(this.serviceTier ? { serviceTier: this.serviceTier } : {}),
 				sandboxPolicy: {
 					type: "readOnly",
 					networkAccess: false,

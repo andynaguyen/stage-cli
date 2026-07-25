@@ -4,6 +4,7 @@ import type {
 	AgentProviderCapability,
 	AgentProviderId,
 	AgentQueryRequest,
+	AgentSessionCreateRequest,
 	AgentSessionResponse,
 	AgentStreamEvent,
 } from "@stagereview/types/agent";
@@ -46,7 +47,7 @@ export class AgentRuntime {
 
 	async createSession(
 		runId: string,
-		providerId: AgentProviderId,
+		request: AgentSessionCreateRequest,
 		repoRoot: string,
 		scope: Scope,
 	): Promise<AgentSessionResponse> {
@@ -56,10 +57,10 @@ export class AgentRuntime {
 		if (this.sessions.size >= MAX_ACTIVE_SESSIONS) {
 			throw new AgentRuntimeError("Too many Ask Agent sessions are active", 429, "session_limit");
 		}
-		const provider = this.providers.get(providerId);
+		const provider = this.providers.get(request.providerId);
 		if (!provider) {
 			throw new AgentRuntimeError(
-				`Agent provider ${providerId} is not registered`,
+				`Agent provider ${request.providerId} is not registered`,
 				400,
 				"provider_unavailable",
 			);
@@ -72,14 +73,18 @@ export class AgentRuntime {
 				`provider_${capability.status}`,
 			);
 		}
+		this.validateConfiguration(capability, request);
 
 		const session = await provider.createSession({
 			repoRoot,
 			instructions: buildAgentInstructions(scope),
+			...(request.model ? { model: request.model } : {}),
+			...(request.reasoningEffort ? { reasoningEffort: request.reasoningEffort } : {}),
+			...(request.serviceTier ? { serviceTier: request.serviceTier } : {}),
 		});
 		const sessionId = randomUUID();
 		this.sessions.set(sessionId, { runId, session });
-		return { sessionId, providerId };
+		return { sessionId, providerId: request.providerId };
 	}
 
 	query(runId: string, request: AgentQueryRequest): AsyncIterable<AgentStreamEvent> {
@@ -120,5 +125,36 @@ export class AgentRuntime {
 			throw new AgentRuntimeError("Ask Agent session not found", 404, "session_not_found");
 		}
 		return managed;
+	}
+
+	private validateConfiguration(
+		capability: AgentProviderCapability,
+		request: AgentSessionCreateRequest,
+	): void {
+		if (!request.model) return;
+		const model = capability.models.find((candidate) => candidate.id === request.model);
+		if (!model) {
+			throw new AgentRuntimeError("The selected agent model is unavailable", 400, "invalid_model");
+		}
+		if (
+			request.reasoningEffort &&
+			!model.reasoningEfforts.some((effort) => effort.id === request.reasoningEffort)
+		) {
+			throw new AgentRuntimeError(
+				"The selected reasoning effort is unavailable for this model",
+				400,
+				"invalid_reasoning_effort",
+			);
+		}
+		if (
+			request.serviceTier &&
+			!model.serviceTiers.some((tier) => tier.id === request.serviceTier)
+		) {
+			throw new AgentRuntimeError(
+				"The selected service tier is unavailable for this model",
+				400,
+				"invalid_service_tier",
+			);
+		}
 	}
 }

@@ -66,12 +66,7 @@ export function agentRoutes(db: StageDb, runtime: AgentRuntime): Route[] {
 				const body = await parseJsonBody(req, res, AgentSessionCreateRequestSchema);
 				if (!body) return;
 				try {
-					const session = await runtime.createSession(
-						run.runId,
-						body.providerId,
-						run.repoRoot,
-						run.scope,
-					);
+					const session = await runtime.createSession(run.runId, body, run.repoRoot, run.scope);
 					writeJson(res, 201, session);
 				} catch (error) {
 					writeRuntimeError(res, error);

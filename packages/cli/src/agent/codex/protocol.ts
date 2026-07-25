@@ -43,6 +43,34 @@ export const TurnStartResponseSchema = z.object({
 	}),
 });
 
+const ReasoningEffortOptionSchema = z.object({
+	reasoningEffort: z.string().min(1),
+	description: z.string(),
+});
+
+const ModelServiceTierSchema = z.object({
+	id: z.string().min(1),
+	name: z.string().min(1),
+	description: z.string(),
+});
+
+const ModelSchema = z.object({
+	id: z.string().min(1),
+	displayName: z.string().min(1),
+	description: z.string(),
+	hidden: z.boolean(),
+	supportedReasoningEfforts: z.array(ReasoningEffortOptionSchema),
+	defaultReasoningEffort: z.string().min(1),
+	serviceTiers: z.array(ModelServiceTierSchema),
+	defaultServiceTier: z.string().min(1).nullable(),
+	isDefault: z.boolean(),
+});
+
+export const ModelListResponseSchema = z.object({
+	data: z.array(ModelSchema),
+	nextCursor: z.string().min(1).nullable(),
+});
+
 export const AgentMessageDeltaNotificationSchema = z.object({
 	threadId: z.string(),
 	turnId: z.string(),

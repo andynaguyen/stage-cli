@@ -53,6 +53,7 @@ class FakeAgentSession implements AgentSession {
 class FakeAgentProvider implements AgentProvider {
 	readonly id = AGENT_PROVIDER.CODEX;
 	readonly session = new FakeAgentSession();
+	lastOptions: AgentProviderSessionOptions | null = null;
 
 	async getCapability(): Promise<AgentProviderCapability> {
 		return {
@@ -60,10 +61,30 @@ class FakeAgentProvider implements AgentProvider {
 			label: "Codex",
 			status: AGENT_CAPABILITY_STATUS.AVAILABLE,
 			detail: "Test provider",
+			models: [
+				{
+					id: "test-model",
+					label: "Test model",
+					description: "Test catalog model",
+					isDefault: true,
+					reasoningEfforts: [{ id: "high", label: "High", description: "More reasoning" }],
+					defaultReasoningEffort: "high",
+					serviceTiers: [
+						{
+							id: "priority",
+							label: "Fast",
+							description: "Lower latency",
+							kind: "fast",
+						},
+					],
+					defaultServiceTier: null,
+				},
+			],
 		};
 	}
 
-	async createSession(_options: AgentProviderSessionOptions): Promise<AgentSession> {
+	async createSession(options: AgentProviderSessionOptions): Promise<AgentSession> {
+		this.lastOptions = options;
 		return this.session;
 	}
 }
@@ -149,6 +170,41 @@ describe("Ask Agent routes", () => {
 		expect(await response.text()).toContain("The selected branch guards missing tokens.");
 		expect(provider.session.lastPrompt).toContain("file: src/auth.ts");
 		expect(provider.session.lastPrompt).toContain("if (!token) return;");
+	});
+
+	it("validates and forwards provider-neutral model settings", async () => {
+		const response = await api(`/api/runs/${runId}/agent/sessions`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				providerId: AGENT_PROVIDER.CODEX,
+				model: "test-model",
+				reasoningEffort: "high",
+				serviceTier: "priority",
+			}),
+		});
+
+		expect(response.status).toBe(201);
+		expect(provider.lastOptions).toMatchObject({
+			model: "test-model",
+			reasoningEffort: "high",
+			serviceTier: "priority",
+		});
+	});
+
+	it("rejects model settings outside the discovered catalog", async () => {
+		const response = await api(`/api/runs/${runId}/agent/sessions`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				providerId: AGENT_PROVIDER.CODEX,
+				model: "test-model",
+				reasoningEffort: "unsupported",
+			}),
+		});
+
+		expect(response.status).toBe(400);
+		expect(await response.json()).toMatchObject({ code: "invalid_reasoning_effort" });
 	});
 
 	it("disposes the provider session through its run-scoped endpoint", async () => {

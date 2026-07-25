@@ -15,6 +15,10 @@ import {
 
 const REQUEST_TIMEOUT_MS = 15_000;
 
+interface CodexAppServerClientOptions {
+	requestTimeoutMs?: number;
+}
+
 interface PendingRequest {
 	resolve: (value: unknown) => void;
 	reject: (error: Error) => void;
@@ -33,11 +37,13 @@ export class CodexAppServerClient {
 	private readonly serverRequestListeners = new Set<ServerRequestListener>();
 	private readonly fatalListeners = new Set<FatalListener>();
 	private readonly removeTerminationListener: () => void;
+	private readonly requestTimeoutMs: number;
 	private nextRequestId = 1;
 	private disposed = false;
 
-	private constructor(process: CodexAppServerProcess) {
+	private constructor(process: CodexAppServerProcess, requestTimeoutMs: number) {
 		this.process = process;
+		this.requestTimeoutMs = requestTimeoutMs;
 		this.lines = createInterface({ input: process.stdout });
 		this.lines.on("line", (line) => this.handleLine(line));
 		this.removeTerminationListener = process.onTermination((error) => this.fail(error));
@@ -45,8 +51,12 @@ export class CodexAppServerClient {
 
 	static async start(
 		factory: CodexProcessFactory = new NodeCodexProcessFactory(),
+		options: CodexAppServerClientOptions = {},
 	): Promise<CodexAppServerClient> {
-		const client = new CodexAppServerClient(factory.start());
+		const client = new CodexAppServerClient(
+			factory.start(),
+			options.requestTimeoutMs ?? REQUEST_TIMEOUT_MS,
+		);
 		try {
 			await client.request("initialize", {
 				clientInfo: {
@@ -64,14 +74,14 @@ export class CodexAppServerClient {
 		}
 	}
 
-	request(method: string, params: unknown): Promise<unknown> {
+	request(method: string, params: unknown, timeoutMs = this.requestTimeoutMs): Promise<unknown> {
 		if (this.disposed) return Promise.reject(new Error("Codex app-server is closed"));
 		const id = this.nextRequestId++;
 		return new Promise((resolve, reject) => {
 			const timer = setTimeout(() => {
 				this.pending.delete(id);
 				reject(new Error(`Codex app-server request timed out: ${method}`));
-			}, REQUEST_TIMEOUT_MS);
+			}, timeoutMs);
 			timer.unref();
 			this.pending.set(id, { resolve, reject, timer });
 			try {

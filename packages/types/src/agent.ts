@@ -17,11 +17,43 @@ export const AGENT_CAPABILITY_STATUS = {
 export const AgentCapabilityStatusSchema = z.enum(AGENT_CAPABILITY_STATUS);
 export type AgentCapabilityStatus = z.infer<typeof AgentCapabilityStatusSchema>;
 
+export const AgentModelOptionSchema = z.strictObject({
+	id: z.string().min(1).max(128),
+	label: z.string().min(1).max(128),
+	description: z.string().max(1000),
+});
+export type AgentModelOption = z.infer<typeof AgentModelOptionSchema>;
+
+export const AGENT_SERVICE_TIER_KIND = {
+	FAST: "fast",
+	OTHER: "other",
+} as const;
+export const AgentServiceTierKindSchema = z.enum(AGENT_SERVICE_TIER_KIND);
+export type AgentServiceTierKind = z.infer<typeof AgentServiceTierKindSchema>;
+
+export const AgentServiceTierSchema = AgentModelOptionSchema.extend({
+	kind: AgentServiceTierKindSchema,
+});
+export type AgentServiceTier = z.infer<typeof AgentServiceTierSchema>;
+
+export const AgentModelSchema = z.strictObject({
+	id: z.string().min(1).max(128),
+	label: z.string().min(1).max(128),
+	description: z.string().max(1000),
+	isDefault: z.boolean(),
+	reasoningEfforts: z.array(AgentModelOptionSchema),
+	defaultReasoningEffort: z.string().min(1).max(128),
+	serviceTiers: z.array(AgentServiceTierSchema),
+	defaultServiceTier: z.string().min(1).max(128).nullable(),
+});
+export type AgentModel = z.infer<typeof AgentModelSchema>;
+
 export const AgentProviderCapabilitySchema = z.strictObject({
 	providerId: AgentProviderIdSchema,
 	label: z.string().min(1),
 	status: AgentCapabilityStatusSchema,
 	detail: z.string().min(1).nullable(),
+	models: z.array(AgentModelSchema),
 });
 export type AgentProviderCapability = z.infer<typeof AgentProviderCapabilitySchema>;
 
@@ -30,9 +62,30 @@ export const AgentCapabilitiesResponseSchema = z.strictObject({
 });
 export type AgentCapabilitiesResponse = z.infer<typeof AgentCapabilitiesResponseSchema>;
 
-export const AgentSessionCreateRequestSchema = z.strictObject({
-	providerId: AgentProviderIdSchema,
-});
+export const AgentSessionCreateRequestSchema = z
+	.strictObject({
+		providerId: AgentProviderIdSchema,
+		model: z.string().min(1).max(128).optional(),
+		reasoningEffort: z.string().min(1).max(128).optional(),
+		serviceTier: z.string().min(1).max(128).optional(),
+	})
+	.superRefine((request, context) => {
+		if (request.model) return;
+		if (request.reasoningEffort) {
+			context.addIssue({
+				code: "custom",
+				message: "reasoningEffort requires a model",
+				path: ["reasoningEffort"],
+			});
+		}
+		if (request.serviceTier) {
+			context.addIssue({
+				code: "custom",
+				message: "serviceTier requires a model",
+				path: ["serviceTier"],
+			});
+		}
+	});
 export type AgentSessionCreateRequest = z.infer<typeof AgentSessionCreateRequestSchema>;
 
 export const AgentSessionResponseSchema = z.strictObject({

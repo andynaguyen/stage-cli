@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import type { CodexAppServerProcess, CodexProcessFactory } from "../agent/codex/process.js";
 import { CodexAgentSession } from "../agent/codex/session.js";
+import type { AgentProviderSessionOptions } from "../agent/provider.js";
 
 const OutgoingMessageSchema = z.object({
 	method: z.string().optional(),
@@ -69,12 +70,11 @@ class FakeCodexProcessFactory implements CodexProcessFactory {
 	}
 }
 
-async function createSession() {
+async function createSession(
+	options: AgentProviderSessionOptions = { repoRoot: "/repo", instructions: "Read only." },
+) {
 	const factory = new FakeCodexProcessFactory();
-	const creating = CodexAgentSession.create(
-		{ repoRoot: "/repo", instructions: "Read only." },
-		factory,
-	);
+	const creating = CodexAgentSession.create(options, factory);
 	await vi.waitFor(() => expect(factory.process.writes).toHaveLength(1));
 	factory.process.emit({ id: factory.process.message(0).id, result: { userAgent: "test" } });
 	await vi.waitFor(() => expect(factory.process.writes).toHaveLength(3));
@@ -228,6 +228,26 @@ describe("Codex agent session", () => {
 				sandboxPolicy: { type: "readOnly", networkAccess: false },
 			});
 		}
+		await session.dispose();
+	});
+
+	it("applies immutable model settings to every turn", async () => {
+		const { session, process } = await createSession({
+			repoRoot: "/repo",
+			instructions: "Read only.",
+			model: "fast-model",
+			reasoningEffort: "high",
+			serviceTier: "fast",
+		});
+		const { eventsPromise } = await beginTurn(session, process, "Inspect this", "turn-1");
+
+		expect(process.messageWithMethod("turn/start").params).toMatchObject({
+			model: "fast-model",
+			effort: "high",
+			serviceTier: "fast",
+		});
+		emitFinalAnswer(process, "turn-1", "answer-1", "Done");
+		await eventsPromise;
 		await session.dispose();
 	});
 
