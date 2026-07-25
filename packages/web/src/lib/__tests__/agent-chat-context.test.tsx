@@ -1,7 +1,9 @@
 // @vitest-environment happy-dom
 
 import { AGENT_CAPABILITY_STATUS, AGENT_PROVIDER } from "@stagereview/types/agent";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	abortAgentSession,
@@ -24,6 +26,13 @@ vi.mock("../agent-api", () => ({
 
 const SESSION_ID = "123e4567-e89b-12d3-a456-426614174000";
 let selectionConsumerRenders = 0;
+
+function renderWithQueryClient(element: ReactElement) {
+	const queryClient = new QueryClient({
+		defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+	});
+	return render(<QueryClientProvider client={queryClient}>{element}</QueryClientProvider>);
+}
 
 function SelectionConsumer() {
 	useOptionalAskAgentSelection();
@@ -167,7 +176,7 @@ describe("AskAgentProvider", () => {
 				onEvent({ type: "turn_completed", outcome: "completed" });
 			},
 		);
-		render(
+		renderWithQueryClient(
 			<AskAgentProvider runId="run-1">
 				<Harness />
 				<SelectionConsumer />
@@ -195,7 +204,7 @@ describe("AskAgentProvider", () => {
 					};
 				}),
 		);
-		render(
+		renderWithQueryClient(
 			<AskAgentProvider runId="run-1">
 				<Harness />
 			</AskAgentProvider>,
@@ -220,7 +229,7 @@ describe("AskAgentProvider", () => {
 				onEvent({ type: "turn_completed", outcome: "completed" });
 			},
 		);
-		render(
+		renderWithQueryClient(
 			<AskAgentProvider runId="run-1">
 				<Harness />
 			</AskAgentProvider>,
@@ -249,7 +258,7 @@ describe("AskAgentProvider", () => {
 
 	it("can retry capability detection after the local setup changes", async () => {
 		vi.mocked(getAgentCapabilities).mockRejectedValueOnce(new Error("Codex is not ready"));
-		render(
+		renderWithQueryClient(
 			<AskAgentProvider runId="run-1">
 				<Harness />
 			</AskAgentProvider>,
@@ -268,7 +277,7 @@ describe("AskAgentProvider", () => {
 				onEvent({ type: "turn_completed", outcome: "completed" });
 			},
 		);
-		render(
+		renderWithQueryClient(
 			<AskAgentProvider runId="run-1">
 				<Harness />
 			</AskAgentProvider>,

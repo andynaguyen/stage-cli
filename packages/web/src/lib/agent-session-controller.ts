@@ -23,7 +23,6 @@ export class AgentSessionController {
 	private sessionId: string | null = null;
 	private sessionPromise: Promise<string> | null = null;
 	private streamController: AbortController | null = null;
-	private streamGeneration = 0;
 	private sessionGeneration = 0;
 	private streaming = false;
 
@@ -36,11 +35,9 @@ export class AgentSessionController {
 	startQuery(query: AgentSessionQuery): Promise<void> | null {
 		if (this.streaming) return null;
 		this.streaming = true;
-		const generation = this.streamGeneration + 1;
-		this.streamGeneration = generation;
 		const controller = new AbortController();
 		this.streamController = controller;
-		return this.performQuery(query, generation, controller);
+		return this.performQuery(query, controller);
 	}
 
 	stop(): void {
@@ -85,29 +82,25 @@ export class AgentSessionController {
 		return true;
 	}
 
-	private async performQuery(
-		query: AgentSessionQuery,
-		generation: number,
-		controller: AbortController,
-	): Promise<void> {
+	private async performQuery(query: AgentSessionQuery, controller: AbortController): Promise<void> {
 		try {
 			const sessionId = await this.ensureSession(query.configuration);
-			if (this.streamGeneration !== generation) return;
+			if (controller.signal.aborted) return;
 			await streamAgentQuery(
 				this.runId,
 				sessionId,
 				query.question,
 				query.selection,
 				(event) => {
-					if (this.streamGeneration === generation) query.onEvent(event);
+					if (!controller.signal.aborted) query.onEvent(event);
 				},
 				controller.signal,
 			);
 		} catch (error) {
-			if (this.streamGeneration !== generation) return;
+			if (controller.signal.aborted) return;
 			throw error;
 		} finally {
-			if (this.streamGeneration === generation) {
+			if (this.streamController === controller) {
 				this.streamController = null;
 				this.streaming = false;
 			}
@@ -136,7 +129,6 @@ export class AgentSessionController {
 	}
 
 	private cancelStream(): void {
-		this.streamGeneration += 1;
 		this.streamController?.abort();
 		this.streamController = null;
 		this.streaming = false;
