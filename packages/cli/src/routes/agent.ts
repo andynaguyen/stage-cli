@@ -7,6 +7,7 @@ import {
 } from "@stagereview/types/agent";
 import { type AgentRuntime, AgentRuntimeError } from "../agent/index.js";
 import type { StageDb } from "../db/client.js";
+import { scopeFromParts } from "../runs/scope-key.js";
 import type { Route } from "../server.js";
 import { parseJsonBody, writeJson } from "./json.js";
 import { enforceSameOrigin, resolveRun } from "./pull-request-shared.js";
@@ -66,7 +67,12 @@ export function agentRoutes(db: StageDb, runtime: AgentRuntime): Route[] {
 				const body = await parseJsonBody(req, res, AgentSessionCreateRequestSchema);
 				if (!body) return;
 				try {
-					const session = await runtime.createSession(run.runId, body, run.repoRoot, run.scope);
+					const session = await runtime.createSession(
+						run.runId,
+						body,
+						run.repoRoot,
+						scopeFromParts(run),
+					);
 					writeJson(res, 201, session);
 				} catch (error) {
 					writeRuntimeError(res, error);
