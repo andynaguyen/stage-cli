@@ -26,7 +26,10 @@ const fastModel: AgentModel = {
 	isDefault: false,
 	reasoningEfforts: [{ id: "medium", label: "Medium", description: "Balanced reasoning" }],
 	defaultReasoningEffort: "medium",
-	serviceTiers: [{ id: "priority", label: "Fast", description: "Lower latency", kind: "fast" }],
+	serviceTiers: [
+		{ id: "priority", label: "Fast", description: "Lower latency", kind: "fast" },
+		{ id: "economy", label: "Economy", description: "Lower usage", kind: "other" },
+	],
 	defaultServiceTier: null,
 };
 
@@ -59,10 +62,7 @@ function renderControls(model: AgentModel, serviceTier: string | null = null) {
 }
 
 function openSettingsMenu() {
-	fireEvent.pointerDown(screen.getByRole("button", { name: "Choose model, effort, and speed" }), {
-		button: 0,
-		ctrlKey: false,
-	});
+	fireEvent.click(screen.getByRole("button", { name: "Choose model, effort, and speed" }));
 }
 
 describe("AgentModelControls", () => {
@@ -73,6 +73,9 @@ describe("AgentModelControls", () => {
 		expect(trigger.textContent).toContain("5.6 Sol");
 		expect(trigger.textContent).toContain("Low");
 		expect(screen.queryByRole("button", { name: "Choose agent model" })).toBeNull();
+		openSettingsMenu();
+		expect(screen.queryByRole("button", { name: "Choose agent speed" })).toBeNull();
+		fireEvent.click(trigger);
 
 		rerender(
 			<AgentModelControls
@@ -90,43 +93,49 @@ describe("AgentModelControls", () => {
 		expect(trigger.textContent).toContain("Medium");
 	});
 
-	it("selects a model from the nested Model menu without locking page scroll", () => {
+	it("drills into Model in place and returns to the root menu", () => {
 		const { onModelChange } = renderControls(balancedModel);
 
 		openSettingsMenu();
 
 		expect(document.body.style.overflow).toBe("");
 		expect(screen.queryByText("Advanced")).toBeNull();
-		fireEvent.click(screen.getByRole("menuitem", { name: "Choose agent model" }));
-		fireEvent.click(screen.getByRole("menuitem", { name: "Use GPT-5.6-Terra" }));
+		fireEvent.click(screen.getByRole("button", { name: "Choose agent model" }));
+		expect(screen.getByRole("button", { name: "Back to agent settings" }).textContent).toContain(
+			"Model",
+		);
+		expect(screen.queryByRole("button", { name: "Choose reasoning effort" })).toBeNull();
+		fireEvent.click(screen.getByRole("button", { name: "Use GPT-5.6-Terra" }));
 		expect(onModelChange).toHaveBeenCalledWith("fast-model");
+		expect(screen.getByRole("button", { name: "Back to agent settings" })).not.toBeNull();
+		fireEvent.click(screen.getByRole("button", { name: "Back to agent settings" }));
+		expect(screen.getByRole("button", { name: "Choose reasoning effort" })).not.toBeNull();
 	});
 
 	it("selects explicit efforts and maps the model default back to provider control", () => {
 		const { onReasoningEffortChange } = renderControls(balancedModel);
 
 		openSettingsMenu();
-		fireEvent.click(screen.getByRole("menuitem", { name: "Choose reasoning effort" }));
-		fireEvent.click(screen.getByRole("menuitem", { name: "Use High reasoning" }));
+		fireEvent.click(screen.getByRole("button", { name: "Choose reasoning effort" }));
+		fireEvent.click(screen.getByRole("button", { name: "Use High reasoning" }));
 		expect(onReasoningEffortChange).toHaveBeenCalledWith("high");
 
-		openSettingsMenu();
-		fireEvent.click(screen.getByRole("menuitem", { name: "Choose reasoning effort" }));
-		fireEvent.click(screen.getByRole("menuitem", { name: "Use Low reasoning" }));
+		fireEvent.click(screen.getByRole("button", { name: "Use Low reasoning" }));
 		expect(onReasoningEffortChange).toHaveBeenLastCalledWith(null);
 	});
 
-	it("maps Standard and Fast speed options to provider tier ids", () => {
+	it("maps every discovered speed option to its provider tier id", () => {
 		const { onServiceTierChange } = renderControls(fastModel);
 
 		openSettingsMenu();
-		fireEvent.click(screen.getByRole("menuitem", { name: "Choose agent speed" }));
-		fireEvent.click(screen.getByRole("menuitem", { name: "Use fast speed" }));
+		fireEvent.click(screen.getByRole("button", { name: "Choose agent speed" }));
+		fireEvent.click(screen.getByRole("button", { name: "Use fast speed" }));
 		expect(onServiceTierChange).toHaveBeenCalledWith("priority");
 
-		openSettingsMenu();
-		fireEvent.click(screen.getByRole("menuitem", { name: "Choose agent speed" }));
-		fireEvent.click(screen.getByRole("menuitem", { name: "Use standard speed" }));
+		fireEvent.click(screen.getByRole("button", { name: "Use economy speed" }));
+		expect(onServiceTierChange).toHaveBeenLastCalledWith("economy");
+
+		fireEvent.click(screen.getByRole("button", { name: "Use standard speed" }));
 		expect(onServiceTierChange).toHaveBeenLastCalledWith(null);
 	});
 

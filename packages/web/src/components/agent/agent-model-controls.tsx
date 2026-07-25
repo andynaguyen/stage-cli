@@ -1,17 +1,13 @@
-import { AGENT_SERVICE_TIER_KIND, type AgentModel } from "@stagereview/types/agent";
-import { Bot, Check, ChevronDown } from "lucide-react";
-import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuLabel,
-	DropdownMenuSub,
-	DropdownMenuSubContent,
-	DropdownMenuSubTrigger,
-	DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import type { AgentModel } from "@stagereview/types/agent";
+import { Bot, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { useState } from "react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { AGENT_CONTROL_CLASS, formatAgentModelLabel } from "./agent-control-primitives";
+import {
+	AGENT_CONTROL_CLASS,
+	AgentSettingOption,
+	formatAgentModelLabel,
+} from "./agent-control-primitives";
 import { AgentModelPicker } from "./agent-model-picker";
 import { AgentReasoningPicker } from "./agent-reasoning-picker";
 
@@ -26,6 +22,27 @@ interface AgentModelControlsProps {
 	onServiceTierChange: (tier: string | null) => void;
 }
 
+const AGENT_SETTINGS_VIEW = {
+	ROOT: "root",
+	MODEL: "model",
+	EFFORT: "effort",
+	SPEED: "speed",
+} as const;
+type AgentSettingsView = (typeof AGENT_SETTINGS_VIEW)[keyof typeof AGENT_SETTINGS_VIEW];
+
+function settingsViewTitle(view: AgentSettingsView): string {
+	switch (view) {
+		case AGENT_SETTINGS_VIEW.MODEL:
+			return "Model";
+		case AGENT_SETTINGS_VIEW.EFFORT:
+			return "Effort";
+		case AGENT_SETTINGS_VIEW.SPEED:
+			return "Speed";
+		case AGENT_SETTINGS_VIEW.ROOT:
+			return "Agent settings";
+	}
+}
+
 export function AgentModelControls({
 	providerLabel,
 	models,
@@ -36,6 +53,9 @@ export function AgentModelControls({
 	onReasoningEffortChange,
 	onServiceTierChange,
 }: AgentModelControlsProps) {
+	const [open, setOpen] = useState(false);
+	const [view, setView] = useState<AgentSettingsView>(AGENT_SETTINGS_VIEW.ROOT);
+
 	if (!selectedModel || models.length === 0) {
 		return (
 			<div className="flex min-w-0 flex-1 items-center">
@@ -47,17 +67,24 @@ export function AgentModelControls({
 		);
 	}
 
-	const fastTier =
-		selectedModel.serviceTiers.find((tier) => tier.kind === AGENT_SERVICE_TIER_KIND.FAST) ?? null;
 	const selectedEffortId = reasoningEffort ?? selectedModel.defaultReasoningEffort;
 	const selectedEffortLabel =
 		selectedModel.reasoningEfforts.find((effort) => effort.id === selectedEffortId)?.label ?? null;
+	const selectedServiceTierId = serviceTier ?? selectedModel.defaultServiceTier;
+	const selectedServiceTierLabel =
+		selectedModel.serviceTiers.find((tier) => tier.id === selectedServiceTierId)?.label ??
+		"Standard";
 	const modelLabel = formatAgentModelLabel(selectedModel.label);
+
+	const handleOpenChange = (nextOpen: boolean) => {
+		setOpen(nextOpen);
+		if (!nextOpen) setView(AGENT_SETTINGS_VIEW.ROOT);
+	};
 
 	return (
 		<div className="flex min-w-0 flex-1 items-center">
-			<DropdownMenu modal={false}>
-				<DropdownMenuTrigger asChild>
+			<Popover modal={false} open={open} onOpenChange={handleOpenChange}>
+				<PopoverTrigger asChild>
 					<button
 						type="button"
 						aria-label="Choose model, effort, and speed"
@@ -70,76 +97,131 @@ export function AgentModelControls({
 						)}
 						<ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
 					</button>
-				</DropdownMenuTrigger>
-				<DropdownMenuContent
+				</PopoverTrigger>
+				<PopoverContent
 					side="top"
 					align="start"
 					sideOffset={8}
 					collisionPadding={16}
-					className="w-60 rounded-xl p-1.5 shadow-xl"
+					className="w-64 rounded-xl p-1.5 shadow-xl"
 				>
-					<AgentModelPicker
-						models={models}
-						selectedModel={selectedModel}
-						onModelChange={onModelChange}
-					/>
-					{selectedModel.reasoningEfforts.length > 0 && (
-						<AgentReasoningPicker
-							selectedModel={selectedModel}
-							reasoningEffort={reasoningEffort}
-							onReasoningEffortChange={onReasoningEffortChange}
-						/>
-					)}
-					{fastTier && (
-						<DropdownMenuSub>
-							<DropdownMenuSubTrigger aria-label="Choose agent speed">
-								<span>Speed</span>
-								<span className="ml-auto text-muted-foreground">
-									{serviceTier === fastTier.id ? fastTier.label : "Standard"}
-								</span>
-							</DropdownMenuSubTrigger>
-							<DropdownMenuSubContent sideOffset={8} className="w-60 rounded-xl p-1.5 shadow-xl">
-								<DropdownMenuLabel>Speed</DropdownMenuLabel>
-								<SpeedOption
-									label="Standard"
-									description="Default speed"
-									selected={serviceTier === null}
-									onSelect={() => onServiceTierChange(null)}
+					{view === AGENT_SETTINGS_VIEW.ROOT ? (
+						<div>
+							<SettingsRootRow
+								label="Model"
+								value={modelLabel}
+								ariaLabel="Choose agent model"
+								onSelect={() => setView(AGENT_SETTINGS_VIEW.MODEL)}
+							/>
+							{selectedModel.reasoningEfforts.length > 0 && selectedEffortLabel && (
+								<SettingsRootRow
+									label="Effort"
+									value={selectedEffortLabel}
+									ariaLabel="Choose reasoning effort"
+									onSelect={() => setView(AGENT_SETTINGS_VIEW.EFFORT)}
 								/>
-								<SpeedOption
-									label={fastTier.label}
-									description={fastTier.description}
-									selected={serviceTier === fastTier.id}
-									onSelect={() => onServiceTierChange(fastTier.id)}
+							)}
+							{selectedModel.serviceTiers.length > 0 && (
+								<SettingsRootRow
+									label="Speed"
+									value={selectedServiceTierLabel}
+									ariaLabel="Choose agent speed"
+									onSelect={() => setView(AGENT_SETTINGS_VIEW.SPEED)}
 								/>
-							</DropdownMenuSubContent>
-						</DropdownMenuSub>
+							)}
+						</div>
+					) : (
+						<div>
+							<button
+								type="button"
+								aria-label="Back to agent settings"
+								className="mb-1 flex h-9 w-full items-center gap-2 border-b px-2 font-medium text-sm text-foreground outline-none hover:text-primary focus-visible:text-primary"
+								onClick={() => setView(AGENT_SETTINGS_VIEW.ROOT)}
+							>
+								<ChevronLeft className="size-4 text-muted-foreground" />
+								{settingsViewTitle(view)}
+							</button>
+							{view === AGENT_SETTINGS_VIEW.MODEL && (
+								<AgentModelPicker
+									models={models}
+									selectedModel={selectedModel}
+									onModelChange={onModelChange}
+								/>
+							)}
+							{view === AGENT_SETTINGS_VIEW.EFFORT && (
+								<AgentReasoningPicker
+									selectedModel={selectedModel}
+									reasoningEffort={reasoningEffort}
+									onReasoningEffortChange={onReasoningEffortChange}
+								/>
+							)}
+							{view === AGENT_SETTINGS_VIEW.SPEED && (
+								<SpeedOptions
+									selectedModel={selectedModel}
+									selectedServiceTierId={selectedServiceTierId}
+									onServiceTierChange={onServiceTierChange}
+								/>
+							)}
+						</div>
 					)}
-				</DropdownMenuContent>
-			</DropdownMenu>
+				</PopoverContent>
+			</Popover>
 		</div>
 	);
 }
 
-interface SpeedOptionProps {
+interface SettingsRootRowProps {
 	label: string;
-	description: string;
-	selected: boolean;
+	value: string;
+	ariaLabel: string;
 	onSelect: () => void;
 }
 
-function SpeedOption({ label, description, selected, onSelect }: SpeedOptionProps) {
+function SettingsRootRow({ label, value, ariaLabel, onSelect }: SettingsRootRowProps) {
 	return (
-		<DropdownMenuItem
-			aria-label={`Use ${label.toLocaleLowerCase()} speed`}
-			className={cn("min-h-14 items-start rounded-lg px-3 py-2", selected && "bg-accent")}
-			onSelect={onSelect}
+		<button
+			type="button"
+			aria-label={ariaLabel}
+			className="flex h-9 w-full items-center gap-2 rounded-lg px-2 text-sm outline-none transition-colors hover:bg-accent focus-visible:bg-accent"
+			onClick={onSelect}
 		>
-			<div className="min-w-0 flex-1">
-				<p>{label}</p>
-				<p className="mt-0.5 truncate text-muted-foreground text-xs">{description}</p>
-			</div>
-			{selected && <Check className="mt-1 size-4 shrink-0 text-muted-foreground" />}
-		</DropdownMenuItem>
+			<span className="flex-1 text-left">{label}</span>
+			<span className="max-w-28 truncate text-muted-foreground">{value}</span>
+			<ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+		</button>
+	);
+}
+
+interface SpeedOptionsProps {
+	selectedModel: AgentModel;
+	selectedServiceTierId: string | null;
+	onServiceTierChange: (tier: string | null) => void;
+}
+
+function SpeedOptions({
+	selectedModel,
+	selectedServiceTierId,
+	onServiceTierChange,
+}: SpeedOptionsProps) {
+	return (
+		<div>
+			<AgentSettingOption
+				label="Standard"
+				ariaLabel="Use standard speed"
+				selected={selectedServiceTierId === null}
+				onSelect={() => onServiceTierChange(null)}
+			/>
+			{selectedModel.serviceTiers.map((tier) => (
+				<AgentSettingOption
+					key={tier.id}
+					label={tier.label}
+					ariaLabel={`Use ${tier.label.toLocaleLowerCase()} speed`}
+					selected={selectedServiceTierId === tier.id}
+					onSelect={() =>
+						onServiceTierChange(tier.id === selectedModel.defaultServiceTier ? null : tier.id)
+					}
+				/>
+			))}
+		</div>
 	);
 }
