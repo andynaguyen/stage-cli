@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { toast } from "@/components/ui/sonner";
 import { makeWrapper } from "@/lib/__tests__/fixtures";
 import { CommentThreadsProvider } from "@/lib/comment-threads-context";
-import { SendToAgentButton } from "../send-to-agent-button";
+import { AddressCommentsButton } from "../address-comments-button";
 
 vi.mock("@/components/ui/sonner", () => ({
 	toast: { success: vi.fn(), error: vi.fn(), dismiss: vi.fn() },
@@ -69,7 +69,7 @@ function renderButton(
 	const { Wrapper } = makeWrapper();
 	return render(
 		<CommentThreadsProvider runId="run-1">
-			<SendToAgentButton onSelectThread={onSelectThread} />
+			<AddressCommentsButton onSelectThread={onSelectThread} />
 		</CommentThreadsProvider>,
 		{ wrapper: Wrapper },
 	);
@@ -78,12 +78,12 @@ function postCount(): number {
 	return vi.mocked(fetch).mock.calls.filter(([, init]) => (init?.method ?? "GET") === "POST")
 		.length;
 }
-describe("SendToAgentButton", () => {
+describe("AddressCommentsButton", () => {
 	it("disables the action when no unresolved threads exist", async () => {
 		renderButton([makeThread({ resolvedAt: "2026-07-24T11:00:00.000Z" })], async () =>
 			noContentResponse(),
 		);
-		const button = await screen.findByRole("button", { name: "Send to Agent" });
+		const button = await screen.findByRole("button", { name: "Address comments" });
 		expect(button.hasAttribute("disabled")).toBe(true);
 	});
 
@@ -111,7 +111,7 @@ describe("SendToAgentButton", () => {
 			],
 			async () => noContentResponse(),
 		);
-		const trigger = await screen.findByRole("button", { name: "Send to Agent" });
+		const trigger = await screen.findByRole("button", { name: "Address comments" });
 		fireEvent.click(trigger);
 
 		expect(await screen.findByText("Comments")).toBeTruthy();
@@ -128,7 +128,7 @@ describe("SendToAgentButton", () => {
 	it("selects an unresolved thread from its preview", async () => {
 		const onSelectThread = vi.fn();
 		renderButton([makeThread()], async () => noContentResponse(), onSelectThread);
-		fireEvent.click(await screen.findByRole("button", { name: "Send to Agent" }));
+		fireEvent.click(await screen.findByRole("button", { name: "Address comments" }));
 		fireEvent.click(await screen.findByRole("button", { name: "Go to src/example.ts, L4" }));
 
 		expect(onSelectThread).toHaveBeenCalledWith("thread-1");
@@ -138,7 +138,7 @@ describe("SendToAgentButton", () => {
 
 	it("cancels without submitting", async () => {
 		renderButton([makeThread()], async () => noContentResponse());
-		const trigger = await screen.findByRole("button", { name: "Send to Agent" });
+		const trigger = await screen.findByRole("button", { name: "Address comments" });
 		fireEvent.click(trigger);
 		await screen.findByText("Comments");
 
@@ -154,7 +154,7 @@ describe("SendToAgentButton", () => {
 			finishSubmission = resolve;
 		});
 		renderButton([makeThread()], () => pending);
-		const trigger = await screen.findByRole("button", { name: "Send to Agent" });
+		const trigger = await screen.findByRole("button", { name: "Address comments" });
 		fireEvent.click(trigger);
 		await screen.findByText("Comments");
 		const confirm = screen.getByRole("button", { name: "Submit" });
@@ -162,13 +162,13 @@ describe("SendToAgentButton", () => {
 		fireEvent.click(confirm);
 		await waitFor(() => expect(confirm.hasAttribute("disabled")).toBe(true));
 		expect(confirm.textContent).toContain("Submit");
-		expect(trigger.textContent).toContain("Send to Agent");
+		expect(trigger.textContent).toContain("Address comments");
 
 		finishSubmission(noContentResponse());
 		await waitFor(() => expect(screen.queryByText("Comments")).toBeNull());
-		expect(trigger.textContent).toContain("Send to Agent");
+		expect(trigger.textContent).toContain("Address comments");
 		expect(trigger.hasAttribute("disabled")).toBe(true);
-		expect(vi.mocked(toast.success)).toHaveBeenCalledWith("Comments sent to agent");
+		expect(vi.mocked(toast.success)).toHaveBeenCalledWith("Comments ready to address");
 
 		fireEvent.click(trigger);
 		expect(postCount()).toBe(1);
@@ -180,7 +180,7 @@ describe("SendToAgentButton", () => {
 			submissions += 1;
 			return submissions === 1 ? jsonResponse({ error: "failed" }, 500) : noContentResponse();
 		});
-		const trigger = await screen.findByRole("button", { name: "Send to Agent" });
+		const trigger = await screen.findByRole("button", { name: "Address comments" });
 		fireEvent.click(trigger);
 		await screen.findByText("Comments");
 		const confirm = screen.getByRole("button", { name: "Submit" });
@@ -191,7 +191,7 @@ describe("SendToAgentButton", () => {
 
 		fireEvent.click(confirm);
 		await waitFor(() => expect(screen.queryByText("Comments")).toBeNull());
-		expect(vi.mocked(toast.success)).toHaveBeenCalledWith("Comments sent to agent");
+		expect(vi.mocked(toast.success)).toHaveBeenCalledWith("Comments ready to address");
 		expect(submissions).toBe(2);
 	});
 });

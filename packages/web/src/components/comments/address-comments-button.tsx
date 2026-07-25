@@ -7,11 +7,11 @@ import { useCommentThreadsContext } from "@/lib/comment-threads-context";
 import { formatLineRange } from "@/lib/format";
 import { useReviewFeedback } from "@/lib/use-review-feedback";
 
-interface SendToAgentButtonProps {
+interface AddressCommentsButtonProps {
 	onSelectThread: (threadId: string) => void;
 }
 
-export function SendToAgentButton({ onSelectThread }: SendToAgentButtonProps) {
+export function AddressCommentsButton({ onSelectThread }: AddressCommentsButtonProps) {
 	const [isOpen, setIsOpen] = useState(false);
 	const { threads, isLoading } = useCommentThreadsContext();
 	const submission = useReviewFeedback();
@@ -34,7 +34,7 @@ export function SendToAgentButton({ onSelectThread }: SendToAgentButtonProps) {
 		submission.mutate(undefined, {
 			onSuccess: () => {
 				setIsOpen(false);
-				toast.success("Comments sent to agent");
+				toast.success("Comments ready to address");
 			},
 		});
 	};
@@ -53,7 +53,7 @@ export function SendToAgentButton({ onSelectThread }: SendToAgentButtonProps) {
 					) : (
 						<Sparkles className="size-3.5" aria-hidden="true" />
 					)}
-					<span className="text-xs">{isLoading ? "Loading comments…" : "Send to Agent"}</span>
+					<span className="text-xs">{isLoading ? "Loading comments…" : "Address comments"}</span>
 				</Button>
 			</PopoverTrigger>
 			<PopoverContent
@@ -107,7 +107,7 @@ export function SendToAgentButton({ onSelectThread }: SendToAgentButtonProps) {
 
 				{submission.isError && (
 					<p className="px-4 pt-3 text-destructive text-xs" role="alert">
-						Couldn't send comments. Check that Stage is still running and try again.
+						Couldn't submit comments. Check that Stage is still running and try again.
 					</p>
 				)}
 

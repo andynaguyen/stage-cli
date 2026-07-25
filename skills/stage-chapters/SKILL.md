@@ -340,7 +340,7 @@ Run `stagereview show` as a persistent foreground command and wait for it to fin
 
 Claude Code clarification: do not launch this as a background-and-forget command. Claude receives the feedback only when the foreground command completes.
 
-The command exits when the user clicks **Send to Agent** or presses Ctrl+C. Every graceful completion prints a pretty-printed JSON envelope to stdout. The envelope returns to whichever coding agent invoked this skill, and submitted feedback keeps Stage's annotation shape inside the Stage review handoff:
+The command exits when the user clicks **Address comments** or presses Ctrl+C. Every graceful completion prints a pretty-printed JSON envelope to stdout. The envelope returns to whichever coding agent invoked this skill, and submitted feedback keeps Stage's annotation shape inside the Stage review handoff:
 
 ```json
 {
