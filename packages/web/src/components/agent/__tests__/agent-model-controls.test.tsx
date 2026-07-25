@@ -7,7 +7,7 @@ import { AgentModelControls } from "../agent-model-controls";
 
 const balancedModel: AgentModel = {
 	id: "balanced-model",
-	label: "Balanced model",
+	label: "GPT-5.6-Sol",
 	description: "Balanced model",
 	isDefault: true,
 	reasoningEfforts: [
@@ -21,7 +21,7 @@ const balancedModel: AgentModel = {
 
 const fastModel: AgentModel = {
 	id: "fast-model",
-	label: "Fast model",
+	label: "GPT-5.6-Terra",
 	description: "Fast model",
 	isDefault: false,
 	reasoningEfforts: [{ id: "medium", label: "Medium", description: "Balanced reasoning" }],
@@ -58,17 +58,21 @@ function renderControls(model: AgentModel, serviceTier: string | null = null) {
 	};
 }
 
+function openSettingsMenu() {
+	fireEvent.pointerDown(screen.getByRole("button", { name: "Choose model, effort, and speed" }), {
+		button: 0,
+		ctrlKey: false,
+	});
+}
+
 describe("AgentModelControls", () => {
-	it("shows compact controls supported by the selected model", () => {
+	it("combines the selected model and effective effort in one control", () => {
 		const { rerender } = renderControls(balancedModel);
 
-		expect(screen.getByRole("button", { name: "Choose agent model" }).textContent).toContain(
-			"Balanced model",
-		);
-		expect(screen.getByRole("button", { name: "Choose reasoning effort" }).textContent).toContain(
-			"Auto",
-		);
-		expect(screen.queryByRole("switch", { name: "Fast service tier" })).toBeNull();
+		const trigger = screen.getByRole("button", { name: "Choose model, effort, and speed" });
+		expect(trigger.textContent).toContain("5.6 Sol");
+		expect(trigger.textContent).toContain("Low");
+		expect(screen.queryByRole("button", { name: "Choose agent model" })).toBeNull();
 
 		rerender(
 			<AgentModelControls
@@ -82,46 +86,48 @@ describe("AgentModelControls", () => {
 				onServiceTierChange={vi.fn()}
 			/>,
 		);
-		expect(screen.getByRole("button", { name: "Choose reasoning effort" }).textContent).toContain(
-			"Medium",
-		);
-		expect(screen.getByRole("switch", { name: "Fast service tier" }).dataset.state).toBe(
-			"unchecked",
-		);
+		expect(trigger.textContent).toContain("5.6 Terra");
+		expect(trigger.textContent).toContain("Medium");
 	});
 
-	it("searches the Codex model group without locking page scroll", () => {
+	it("selects a model from the nested Model menu without locking page scroll", () => {
 		const { onModelChange } = renderControls(balancedModel);
 
-		fireEvent.click(screen.getByRole("button", { name: "Choose agent model" }));
+		openSettingsMenu();
 
 		expect(document.body.style.overflow).toBe("");
-		expect(screen.getByText("Codex")).not.toBeNull();
-		fireEvent.change(screen.getByRole("textbox", { name: "Search models" }), {
-			target: { value: "fast" },
-		});
-		fireEvent.click(screen.getByRole("button", { name: "Use Fast model" }));
+		expect(screen.queryByText("Advanced")).toBeNull();
+		fireEvent.click(screen.getByRole("menuitem", { name: "Choose agent model" }));
+		fireEvent.click(screen.getByRole("menuitem", { name: "Use GPT-5.6-Terra" }));
 		expect(onModelChange).toHaveBeenCalledWith("fast-model");
 	});
 
-	it("offers icon-led reasoning options and maps Auto to provider defaults", () => {
+	it("selects explicit efforts and maps the model default back to provider control", () => {
 		const { onReasoningEffortChange } = renderControls(balancedModel);
 
-		fireEvent.click(screen.getByRole("button", { name: "Choose reasoning effort" }));
-		fireEvent.click(screen.getByRole("button", { name: "Use High reasoning" }));
+		openSettingsMenu();
+		fireEvent.click(screen.getByRole("menuitem", { name: "Choose reasoning effort" }));
+		fireEvent.click(screen.getByRole("menuitem", { name: "Use High reasoning" }));
 		expect(onReasoningEffortChange).toHaveBeenCalledWith("high");
 
-		fireEvent.click(screen.getByRole("button", { name: "Choose reasoning effort" }));
-		fireEvent.click(screen.getByRole("button", { name: "Use automatic reasoning" }));
+		openSettingsMenu();
+		fireEvent.click(screen.getByRole("menuitem", { name: "Choose reasoning effort" }));
+		fireEvent.click(screen.getByRole("menuitem", { name: "Use Low reasoning" }));
 		expect(onReasoningEffortChange).toHaveBeenLastCalledWith(null);
 	});
 
-	it("maps the Fast toggle to the provider tier id", () => {
+	it("maps Standard and Fast speed options to provider tier ids", () => {
 		const { onServiceTierChange } = renderControls(fastModel);
 
-		fireEvent.click(screen.getByRole("switch", { name: "Fast service tier" }));
-
+		openSettingsMenu();
+		fireEvent.click(screen.getByRole("menuitem", { name: "Choose agent speed" }));
+		fireEvent.click(screen.getByRole("menuitem", { name: "Use fast speed" }));
 		expect(onServiceTierChange).toHaveBeenCalledWith("priority");
+
+		openSettingsMenu();
+		fireEvent.click(screen.getByRole("menuitem", { name: "Choose agent speed" }));
+		fireEvent.click(screen.getByRole("menuitem", { name: "Use standard speed" }));
+		expect(onServiceTierChange).toHaveBeenLastCalledWith(null);
 	});
 
 	it("falls back to provider identity when discovery is unavailable", () => {
@@ -139,6 +145,6 @@ describe("AgentModelControls", () => {
 		);
 
 		expect(screen.getByText("Codex")).not.toBeNull();
-		expect(screen.queryByRole("button", { name: "Choose agent model" })).toBeNull();
+		expect(screen.queryByRole("button", { name: "Choose model, effort, and speed" })).toBeNull();
 	});
 });

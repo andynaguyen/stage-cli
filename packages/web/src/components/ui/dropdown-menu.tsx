@@ -1,4 +1,5 @@
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
+import { ChevronRight } from "lucide-react";
 import type * as React from "react";
 
 import { cn } from "@/lib/utils";
@@ -11,6 +12,61 @@ function DropdownMenuTrigger({
 	...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Trigger>) {
 	return <DropdownMenuPrimitive.Trigger data-slot="dropdown-menu-trigger" {...props} />;
+}
+
+function DropdownMenuSub({ ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Sub>) {
+	return <DropdownMenuPrimitive.Sub data-slot="dropdown-menu-sub" {...props} />;
+}
+
+function DropdownMenuSubTrigger({
+	className,
+	children,
+	...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.SubTrigger>) {
+	return (
+		<DropdownMenuPrimitive.SubTrigger
+			data-slot="dropdown-menu-sub-trigger"
+			className={cn(
+				"flex h-10 cursor-default items-center gap-3 rounded-lg px-3 text-sm outline-hidden select-none focus:bg-accent data-[state=open]:bg-accent",
+				className,
+			)}
+			{...props}
+		>
+			{children}
+			<ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+		</DropdownMenuPrimitive.SubTrigger>
+	);
+}
+
+function DropdownMenuSubContent({
+	className,
+	...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.SubContent>) {
+	return (
+		<DropdownMenuPrimitive.Portal>
+			<DropdownMenuPrimitive.SubContent
+				data-slot="dropdown-menu-sub-content"
+				className={cn(
+					"z-50 min-w-[8rem] origin-(--radix-dropdown-menu-content-transform-origin) overflow-hidden rounded-lg border bg-popover p-1 text-popover-foreground shadow-md outline-hidden data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2",
+					className,
+				)}
+				{...props}
+			/>
+		</DropdownMenuPrimitive.Portal>
+	);
+}
+
+function DropdownMenuLabel({
+	className,
+	...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Label>) {
+	return (
+		<DropdownMenuPrimitive.Label
+			data-slot="dropdown-menu-label"
+			className={cn("px-3 py-2 font-medium text-muted-foreground text-sm", className)}
+			{...props}
+		/>
+	);
 }
 
 function DropdownMenuContent({
@@ -56,4 +112,13 @@ function DropdownMenuItem({
 	);
 }
 
-export { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger };
+export {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuLabel,
+	DropdownMenuSub,
+	DropdownMenuSubContent,
+	DropdownMenuSubTrigger,
+	DropdownMenuTrigger,
+};

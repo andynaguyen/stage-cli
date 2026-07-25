@@ -50,6 +50,7 @@ class ModelCatalogProcess implements CodexAppServerProcess {
 						[
 							{ reasoningEffort: "low", description: "Lower latency" },
 							{ reasoningEffort: "high", description: "More reasoning" },
+							{ reasoningEffort: "xhigh", description: "Extended reasoning" },
 						],
 						[],
 					),
@@ -229,6 +230,7 @@ describe("Codex agent provider capability", () => {
 				reasoningEfforts: [
 					{ id: "low", label: "Low", description: "Lower latency" },
 					{ id: "high", label: "High", description: "More reasoning" },
+					{ id: "xhigh", label: "Extra High", description: "Extended reasoning" },
 				],
 				defaultReasoningEffort: "low",
 				serviceTiers: [],

@@ -1,8 +1,13 @@
 import type { AgentModel } from "@stagereview/types/agent";
-import { Brain } from "lucide-react";
-import { useState } from "react";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { AGENT_CONTROL_CLASS } from "./agent-control-primitives";
+import { Check } from "lucide-react";
+import {
+	DropdownMenuItem,
+	DropdownMenuLabel,
+	DropdownMenuSub,
+	DropdownMenuSubContent,
+	DropdownMenuSubTrigger,
+} from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
 
 interface AgentReasoningPickerProps {
 	selectedModel: AgentModel;
@@ -15,74 +20,38 @@ export function AgentReasoningPicker({
 	reasoningEffort,
 	onReasoningEffortChange,
 }: AgentReasoningPickerProps) {
-	const [open, setOpen] = useState(false);
-	const selectedOption = selectedModel.reasoningEfforts.find(
-		(effort) => effort.id === reasoningEffort,
-	);
-	const selectedLabel = selectedOption?.label ?? "Auto";
-
-	const chooseEffort = (effort: string | null) => {
-		onReasoningEffortChange(effort);
-		setOpen(false);
-	};
+	const selectedEffortId = reasoningEffort ?? selectedModel.defaultReasoningEffort;
+	const selectedLabel =
+		selectedModel.reasoningEfforts.find((effort) => effort.id === selectedEffortId)?.label ??
+		selectedEffortId;
 
 	return (
-		<Popover modal={false} open={open} onOpenChange={setOpen}>
-			<PopoverTrigger asChild>
-				<button type="button" aria-label="Choose reasoning effort" className={AGENT_CONTROL_CLASS}>
-					<Brain className="size-3.5" />
-					<span>{selectedLabel}</span>
-				</button>
-			</PopoverTrigger>
-			<PopoverContent
-				side="top"
-				align="start"
-				sideOffset={8}
-				collisionPadding={16}
-				className="w-44 rounded-xl p-1.5 shadow-xl"
-			>
-				<fieldset>
-					<legend className="sr-only">Reasoning effort options</legend>
-					<ReasoningOption
-						label="Auto"
-						selected={reasoningEffort === null}
-						onSelect={() => chooseEffort(null)}
-					/>
-					{selectedModel.reasoningEfforts.map((effort) => (
-						<ReasoningOption
+		<DropdownMenuSub>
+			<DropdownMenuSubTrigger aria-label="Choose reasoning effort">
+				<span>Effort</span>
+				<span className="ml-auto max-w-28 truncate text-muted-foreground">{selectedLabel}</span>
+			</DropdownMenuSubTrigger>
+			<DropdownMenuSubContent sideOffset={8} className="w-52 rounded-xl p-1.5 shadow-xl">
+				<DropdownMenuLabel>Effort</DropdownMenuLabel>
+				{selectedModel.reasoningEfforts.map((effort) => {
+					const selected = effort.id === selectedEffortId;
+					return (
+						<DropdownMenuItem
 							key={effort.id}
-							label={effort.label}
-							selected={reasoningEffort === effort.id}
-							onSelect={() => chooseEffort(effort.id)}
-						/>
-					))}
-				</fieldset>
-			</PopoverContent>
-		</Popover>
-	);
-}
-
-interface ReasoningOptionProps {
-	label: string;
-	selected: boolean;
-	onSelect: () => void;
-}
-
-function ReasoningOption({ label, selected, onSelect }: ReasoningOptionProps) {
-	const accessibleLabel = label === "Auto" ? "Use automatic reasoning" : `Use ${label} reasoning`;
-	return (
-		<button
-			type="button"
-			aria-label={accessibleLabel}
-			aria-pressed={selected}
-			className="flex h-9 w-full items-center gap-2 rounded-lg px-2 text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
-			onClick={onSelect}
-		>
-			<span className="flex w-3 justify-center">
-				{selected && <span className="size-1.5 rounded-full bg-foreground" />}
-			</span>
-			<Brain className="size-3.5 text-muted-foreground" />
-			{label}
-		</button>
+							aria-label={`Use ${effort.label} reasoning`}
+							className={cn("h-10 rounded-lg px-3", selected && "bg-accent")}
+							onSelect={() =>
+								onReasoningEffortChange(
+									effort.id === selectedModel.defaultReasoningEffort ? null : effort.id,
+								)
+							}
+						>
+							<span className="min-w-0 flex-1 truncate">{effort.label}</span>
+							{selected && <Check className="size-4 shrink-0 text-muted-foreground" />}
+						</DropdownMenuItem>
+					);
+				})}
+			</DropdownMenuSubContent>
+		</DropdownMenuSub>
 	);
 }

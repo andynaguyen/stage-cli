@@ -61,7 +61,7 @@ function reasoningEffortLabel(id: string): string {
 		case "high":
 			return "High";
 		case "xhigh":
-			return "Extra high";
+			return "Extra High";
 		case "max":
 			return "Max";
 		case "ultra":
