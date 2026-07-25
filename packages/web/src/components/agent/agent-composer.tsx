@@ -7,6 +7,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useAskAgent } from "@/lib/agent-chat-context";
 import { cn } from "@/lib/utils";
 import { AgentSelectionLabel } from "./agent-message";
+import { AgentModelControls } from "./agent-model-controls";
 
 export function AgentPermissionCards() {
 	const { pendingPermissions, respondToPermission } = useAskAgent();
@@ -69,6 +70,13 @@ export function AgentComposer() {
 		clearSelection,
 		isStreaming,
 		focusRequest,
+		models,
+		selectedModel,
+		reasoningEffort,
+		serviceTier,
+		selectModel,
+		selectReasoningEffort,
+		selectServiceTier,
 		send,
 		stop,
 	} = useAskAgent();
@@ -136,10 +144,16 @@ export function AgentComposer() {
 					onKeyDown={handleKeyDown}
 				/>
 				<div className="flex items-center justify-between gap-2 px-2.5 py-2">
-					<div className="flex items-center gap-1.5 text-muted-foreground text-[11px]">
-						<span className="rounded-md border bg-muted/30 px-2 py-1">{providerLabel}</span>
-						<span className="rounded-md border bg-muted/30 px-2 py-1">Read only</span>
-					</div>
+					<AgentModelControls
+						providerLabel={providerLabel}
+						models={models}
+						selectedModel={selectedModel}
+						reasoningEffort={reasoningEffort}
+						serviceTier={serviceTier}
+						onModelChange={selectModel}
+						onReasoningEffortChange={selectReasoningEffort}
+						onServiceTierChange={selectServiceTier}
+					/>
 					{isStreaming ? (
 						<Tooltip>
 							<TooltipTrigger asChild>

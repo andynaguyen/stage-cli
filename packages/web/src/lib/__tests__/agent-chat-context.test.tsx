@@ -25,10 +25,25 @@ vi.mock("../agent-api", () => ({
 const SESSION_ID = "123e4567-e89b-12d3-a456-426614174000";
 
 function Harness() {
-	const { capability, messages, openWithSelection, refreshCapability, send } = useAskAgent();
+	const {
+		capability,
+		messages,
+		openWithSelection,
+		refreshCapability,
+		reasoningEffort,
+		selectedModel,
+		selectModel,
+		selectReasoningEffort,
+		selectServiceTier,
+		serviceTier,
+		send,
+	} = useAskAgent();
 	return (
 		<>
 			<span>{capability?.status ?? "loading"}</span>
+			<span data-testid="configuration">
+				{selectedModel?.id ?? "default"}:{reasoningEffort ?? "auto"}:{serviceTier ?? "normal"}
+			</span>
 			<button
 				type="button"
 				onClick={() => {
@@ -58,6 +73,18 @@ function Harness() {
 			<button type="button" onClick={refreshCapability}>
 				Check again
 			</button>
+			<button type="button" onClick={() => selectModel("fast-model")}>
+				Select fast model
+			</button>
+			<button type="button" onClick={() => selectModel("balanced-model")}>
+				Select balanced model
+			</button>
+			<button type="button" onClick={() => selectReasoningEffort("high")}>
+				Select high effort
+			</button>
+			<button type="button" onClick={() => selectServiceTier("fast")}>
+				Enable fast tier
+			</button>
 			<output data-testid="messages">
 				{JSON.stringify(
 					messages.map(({ role, content, selection }) => ({ role, content, selection })),
@@ -75,6 +102,38 @@ beforeEach(() => {
 				label: "Codex",
 				status: AGENT_CAPABILITY_STATUS.AVAILABLE,
 				detail: "Codex CLI 0.144.6",
+				models: [
+					{
+						id: "balanced-model",
+						label: "Balanced model",
+						description: "Balanced model",
+						isDefault: true,
+						reasoningEfforts: [
+							{ id: "low", label: "Low", description: "Lower latency" },
+							{ id: "high", label: "High", description: "More reasoning" },
+						],
+						defaultReasoningEffort: "low",
+						serviceTiers: [],
+						defaultServiceTier: null,
+					},
+					{
+						id: "fast-model",
+						label: "Fast model",
+						description: "Fast model",
+						isDefault: false,
+						reasoningEfforts: [{ id: "high", label: "High", description: "More reasoning" }],
+						defaultReasoningEffort: "high",
+						serviceTiers: [
+							{
+								id: "priority",
+								label: "Fast",
+								description: "Lower latency",
+								kind: "fast",
+							},
+						],
+						defaultServiceTier: null,
+					},
+				],
 			},
 		],
 	});
@@ -169,5 +228,39 @@ describe("AskAgentProvider", () => {
 
 		await screen.findByText(AGENT_CAPABILITY_STATUS.AVAILABLE);
 		expect(getAgentCapabilities).toHaveBeenCalledTimes(2);
+	});
+
+	it("creates a fresh configured session and keeps effort scoped per model", async () => {
+		vi.mocked(streamAgentQuery).mockImplementation(
+			async (_runId, _sessionId, _question, _selection, onEvent) => {
+				onEvent({ type: "turn_completed", outcome: "completed" });
+			},
+		);
+		render(
+			<AskAgentProvider runId="run-1">
+				<Harness />
+			</AskAgentProvider>,
+		);
+		await screen.findByText(AGENT_CAPABILITY_STATUS.AVAILABLE);
+
+		fireEvent.click(screen.getByRole("button", { name: "Select high effort" }));
+		expect(screen.getByTestId("configuration").textContent).toBe("balanced-model:high:normal");
+		fireEvent.click(screen.getByRole("button", { name: "Select fast model" }));
+		expect(screen.getByTestId("configuration").textContent).toBe("fast-model:auto:normal");
+		fireEvent.click(screen.getByRole("button", { name: "Select high effort" }));
+		fireEvent.click(screen.getByRole("button", { name: "Enable fast tier" }));
+		fireEvent.click(screen.getByRole("button", { name: "Ask selection" }));
+
+		await waitFor(() => expect(createAgentSession).toHaveBeenCalledOnce());
+		expect(createAgentSession).toHaveBeenCalledWith("run-1", {
+			providerId: AGENT_PROVIDER.CODEX,
+			model: "fast-model",
+			reasoningEffort: "high",
+			serviceTier: "fast",
+		});
+
+		fireEvent.click(screen.getByRole("button", { name: "Select balanced model" }));
+		expect(screen.getByTestId("configuration").textContent).toBe("balanced-model:high:normal");
+		await waitFor(() => expect(deleteAgentSession).toHaveBeenCalledWith("run-1", SESSION_ID));
 	});
 });

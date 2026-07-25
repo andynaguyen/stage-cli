@@ -2,6 +2,7 @@ import {
 	AGENT_CAPABILITY_STATUS,
 	AGENT_PERMISSION_DECISION,
 	AGENT_PROVIDER,
+	type AgentModel,
 	type AgentPermissionDecision,
 	type AgentProviderCapability,
 	type AgentProviderId,
@@ -73,11 +74,18 @@ interface AskAgentContextValue {
 	pendingPermissions: AgentPendingPermission[];
 	isStreaming: boolean;
 	focusRequest: number;
+	models: AgentModel[];
+	selectedModel: AgentModel | null;
+	reasoningEffort: string | null;
+	serviceTier: string | null;
 	open: () => void;
 	close: () => void;
 	openWithSelection: (selection: AgentSelection) => void;
 	clearSelection: () => void;
 	refreshCapability: () => void;
+	selectModel: (modelId: string) => void;
+	selectReasoningEffort: (effort: string | null) => void;
+	selectServiceTier: (tier: string | null) => void;
 	send: (question: string) => Promise<void>;
 	stop: () => void;
 	reset: () => void;
@@ -88,6 +96,7 @@ interface AskAgentContextValue {
 }
 
 const AskAgentContext = createContext<AskAgentContextValue | null>(null);
+const EMPTY_MODELS: AgentModel[] = [];
 
 function newMessage(
 	role: AgentChatMessage["role"],
@@ -180,6 +189,13 @@ export function AskAgentProvider({
 	const [pendingPermissions, setPendingPermissions] = useState<AgentPendingPermission[]>([]);
 	const [isStreaming, setIsStreaming] = useState(false);
 	const [focusRequest, setFocusRequest] = useState(0);
+	const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
+	const [reasoningEffortByModel, setReasoningEffortByModel] = useState<Map<string, string>>(
+		() => new Map(),
+	);
+	const [serviceTierByModel, setServiceTierByModel] = useState<Map<string, string>>(
+		() => new Map(),
+	);
 	const capabilityGenerationRef = useRef(0);
 	const sessionIdRef = useRef<string | null>(null);
 	const sessionPromiseRef = useRef<Promise<string> | null>(null);
@@ -187,6 +203,16 @@ export function AskAgentProvider({
 	const streamingRef = useRef(false);
 	const generationRef = useRef(0);
 	const sessionGenerationRef = useRef(0);
+	const models = capability?.models ?? EMPTY_MODELS;
+	const selectedModel = useMemo(() => {
+		const selected = models.find((model) => model.id === selectedModelId);
+		if (selected) return selected;
+		return models.find((model) => model.isDefault) ?? models[0] ?? null;
+	}, [models, selectedModelId]);
+	const reasoningEffort = selectedModel
+		? (reasoningEffortByModel.get(selectedModel.id) ?? null)
+		: null;
+	const serviceTier = selectedModel ? (serviceTierByModel.get(selectedModel.id) ?? null) : null;
 
 	const refreshCapability = useCallback(() => {
 		const generation = capabilityGenerationRef.current + 1;
@@ -206,6 +232,7 @@ export function AskAgentProvider({
 					label: "Local agent",
 					status: AGENT_CAPABILITY_STATUS.ERROR,
 					detail: describeError(error),
+					models: [],
 				});
 			})
 			.finally(() => {
@@ -236,7 +263,12 @@ export function AskAgentProvider({
 		if (sessionPromiseRef.current) return sessionPromiseRef.current;
 
 		const sessionGeneration = sessionGenerationRef.current;
-		const sessionPromise = createAgentSession(runId, providerId).then(async (session) => {
+		const sessionPromise = createAgentSession(runId, {
+			providerId,
+			...(selectedModel ? { model: selectedModel.id } : {}),
+			...(reasoningEffort ? { reasoningEffort } : {}),
+			...(serviceTier ? { serviceTier } : {}),
+		}).then(async (session) => {
 			if (sessionGenerationRef.current !== sessionGeneration) {
 				await deleteAgentSession(runId, session.sessionId).catch(() => undefined);
 				throw new DOMException("Session creation was superseded", "AbortError");
@@ -250,7 +282,7 @@ export function AskAgentProvider({
 		} finally {
 			if (sessionPromiseRef.current === sessionPromise) sessionPromiseRef.current = null;
 		}
-	}, [providerId, runId]);
+	}, [providerId, reasoningEffort, runId, selectedModel, serviceTier]);
 
 	const open = useCallback(() => {
 		setIsOpen(true);
@@ -384,6 +416,43 @@ export function AskAgentProvider({
 		setFocusRequest((request) => request + 1);
 	}, [runId]);
 
+	const selectModel = useCallback(
+		(modelId: string) => {
+			if (selectedModel?.id === modelId) return;
+			reset();
+			setSelectedModelId(modelId);
+		},
+		[reset, selectedModel],
+	);
+
+	const selectReasoningEffort = useCallback(
+		(effort: string | null) => {
+			if (!selectedModel || reasoningEffort === effort) return;
+			reset();
+			setReasoningEffortByModel((current) => {
+				const next = new Map(current);
+				if (effort) next.set(selectedModel.id, effort);
+				else next.delete(selectedModel.id);
+				return next;
+			});
+		},
+		[reasoningEffort, reset, selectedModel],
+	);
+
+	const selectServiceTier = useCallback(
+		(tier: string | null) => {
+			if (!selectedModel || serviceTier === tier) return;
+			reset();
+			setServiceTierByModel((current) => {
+				const next = new Map(current);
+				if (tier) next.set(selectedModel.id, tier);
+				else next.delete(selectedModel.id);
+				return next;
+			});
+		},
+		[reset, selectedModel, serviceTier],
+	);
+
 	const respondToPermission = useCallback(
 		async (requestId: string | number, decision: AgentPermissionDecision) => {
 			const sessionId = sessionIdRef.current;
@@ -406,11 +475,18 @@ export function AskAgentProvider({
 			pendingPermissions,
 			isStreaming,
 			focusRequest,
+			models,
+			selectedModel,
+			reasoningEffort,
+			serviceTier,
 			open,
 			close,
 			openWithSelection,
 			clearSelection,
 			refreshCapability,
+			selectModel,
+			selectReasoningEffort,
+			selectServiceTier,
 			send,
 			stop,
 			reset,
@@ -425,11 +501,18 @@ export function AskAgentProvider({
 			pendingPermissions,
 			isStreaming,
 			focusRequest,
+			models,
+			selectedModel,
+			reasoningEffort,
+			serviceTier,
 			open,
 			close,
 			openWithSelection,
 			clearSelection,
 			refreshCapability,
+			selectModel,
+			selectReasoningEffort,
+			selectServiceTier,
 			send,
 			stop,
 			reset,

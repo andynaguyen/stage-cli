@@ -1,9 +1,9 @@
 import {
 	AgentCapabilitiesResponseSchema,
 	type AgentPermissionDecision,
-	type AgentProviderId,
 	type AgentQueryRequest,
 	type AgentSelection,
+	type AgentSessionCreateRequest,
 	AgentSessionResponseSchema,
 	type AgentStreamEvent,
 	AgentStreamEventSchema,
@@ -48,11 +48,11 @@ export async function getAgentCapabilities(runId: string) {
 	return AgentCapabilitiesResponseSchema.parse(raw);
 }
 
-export async function createAgentSession(runId: string, providerId: AgentProviderId) {
+export async function createAgentSession(runId: string, request: AgentSessionCreateRequest) {
 	const raw = await fetchJson(runAgentUrl(runId, "sessions"), {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({ providerId }),
+		body: JSON.stringify(request),
 	});
 	return AgentSessionResponseSchema.parse(raw);
 }
