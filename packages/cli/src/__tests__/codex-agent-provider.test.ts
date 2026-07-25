@@ -146,6 +146,17 @@ class HangingModelProcess implements CodexAppServerProcess {
 	}
 }
 
+class RetryingModelProcessFactory implements CodexProcessFactory {
+	readonly hangingProcess = new HangingModelProcess();
+	readonly catalogProcess = new ModelCatalogProcess();
+	starts = 0;
+
+	start(): CodexAppServerProcess {
+		this.starts += 1;
+		return this.starts === 1 ? this.hangingProcess : this.catalogProcess;
+	}
+}
+
 class FakeCommandRunner implements CodexCommandRunner {
 	constructor(private readonly handler: (args: string[]) => Promise<CodexCommandResult>) {}
 
@@ -279,6 +290,27 @@ describe("Codex agent provider capability", () => {
 		expect(capability.status).toBe(AGENT_CAPABILITY_STATUS.AVAILABLE);
 		expect(capability.models).toEqual([]);
 		expect(process.terminated).toBe(true);
+	});
+
+	it("retries model discovery after a transient failure", async () => {
+		const factory = new RetryingModelProcessFactory();
+		const provider = new CodexAgentProvider(
+			factory,
+			new FakeCommandRunner(async (args) => ({
+				stdout: args[0] === "--version" ? "codex-cli 0.144.6" : "Logged in",
+				stderr: "",
+			})),
+			10,
+		);
+
+		const first = await provider.getCapability();
+		const second = await provider.getCapability();
+
+		expect(first.models).toEqual([]);
+		expect(second.models.map((model) => model.id)).toEqual(["balanced-model", "fast-model"]);
+		expect(factory.starts).toBe(2);
+		expect(factory.hangingProcess.terminated).toBe(true);
+		expect(factory.catalogProcess.terminated).toBe(true);
 	});
 
 	it("reports command failures without presenting an install action", async () => {

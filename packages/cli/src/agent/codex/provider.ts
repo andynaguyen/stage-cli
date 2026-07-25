@@ -136,7 +136,11 @@ export class CodexAgentProvider implements AgentProvider {
 
 	private getModelCatalog(): Promise<AgentModel[]> {
 		if (!this.modelCatalogPromise) {
-			this.modelCatalogPromise = this.discoverModels().catch(() => []);
+			const discovery = this.discoverModels().catch(() => {
+				if (this.modelCatalogPromise === discovery) this.modelCatalogPromise = null;
+				return [];
+			});
+			this.modelCatalogPromise = discovery;
 		}
 		return this.modelCatalogPromise;
 	}
