@@ -26,6 +26,11 @@ const COMPLETION_STATE = {
 
 type CompletionState = (typeof COMPLETION_STATE)[keyof typeof COMPLETION_STATE];
 
+export interface ReviewFeedbackCompletion {
+	persist: () => void | Promise<void>;
+	acknowledge: () => Promise<void>;
+}
+
 const WORKING_TREE_REVIEW_LABEL = {
 	[WORKING_TREE_REF.WORK]: {
 		gitRef: "working tree",
@@ -69,21 +74,28 @@ export class ReviewFeedbackSession {
 		this.resolveResult = resolveResult;
 	}
 
-	async complete(result: ReviewFeedbackExport, acknowledge: () => Promise<void>): Promise<void> {
+	async complete(
+		result: ReviewFeedbackExport,
+		completion: ReviewFeedbackCompletion,
+	): Promise<void> {
 		if (this.state !== COMPLETION_STATE.PENDING) {
 			throw new ReviewSessionConflictError();
 		}
 
 		this.state = COMPLETION_STATE.COMPLETING;
 		try {
-			await acknowledge();
+			await completion.persist();
 		} catch (error) {
 			this.state = COMPLETION_STATE.PENDING;
 			throw error;
 		}
 
 		this.state = COMPLETION_STATE.COMPLETED;
-		this.resolveResult(result);
+		try {
+			await completion.acknowledge();
+		} finally {
+			this.resolveResult(result);
+		}
 	}
 }
 

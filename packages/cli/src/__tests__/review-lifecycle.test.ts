@@ -75,7 +75,10 @@ describe("runReviewSession", () => {
 		const running = runReviewSession(session, dependencies);
 		await Promise.resolve();
 
-		await session.complete(makeResult(), async () => {});
+		await session.complete(makeResult(), {
+			persist: () => {},
+			acknowledge: async () => {},
+		});
 		await running;
 
 		expect(stderr).toEqual([

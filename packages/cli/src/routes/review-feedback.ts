@@ -59,39 +59,25 @@ async function completeReviewSession(
 	threadIds: string[],
 ): Promise<void> {
 	try {
-		await session.complete(result, async () => {
-			await resolveSubmittedThreads(db, threadIds, async () => {
+		await session.complete(result, {
+			persist: () => {
+				db.update(commentThread)
+					.set({ resolvedAt: new Date() })
+					.where(inArray(commentThread.id, threadIds))
+					.run();
+			},
+			acknowledge: async () => {
 				const responseFinished = finished(res, { cleanup: true });
 				res.writeHead(204);
 				res.end();
 				await responseFinished;
-			});
+			},
 		});
 	} catch (error) {
 		if (error instanceof ReviewSessionConflictError) {
 			writeJson(res, 409, { error: error.message });
 			return;
 		}
-		throw error;
-	}
-}
-
-async function resolveSubmittedThreads(
-	db: StageDb,
-	threadIds: string[],
-	acknowledge: () => Promise<void>,
-): Promise<void> {
-	db.update(commentThread)
-		.set({ resolvedAt: new Date() })
-		.where(inArray(commentThread.id, threadIds))
-		.run();
-	try {
-		await acknowledge();
-	} catch (error) {
-		db.update(commentThread)
-			.set({ resolvedAt: null })
-			.where(inArray(commentThread.id, threadIds))
-			.run();
 		throw error;
 	}
 }
