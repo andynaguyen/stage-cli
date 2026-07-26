@@ -39,6 +39,7 @@ beforeEach(() => {
 		selectServiceTier: vi.fn(),
 	});
 	vi.mocked(useAskAgentConversation).mockReturnValue({
+		runId: "run-1",
 		messages: [],
 		pendingSelection: null,
 		pendingPermissions: [],

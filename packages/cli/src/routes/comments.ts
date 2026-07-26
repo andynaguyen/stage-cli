@@ -1,4 +1,5 @@
 import {
+	COMMENT_ANCHOR,
 	CommentBodySchema,
 	CreateCommentThreadBodySchema,
 	ResolveThreadBodySchema,
@@ -48,9 +49,10 @@ export function commentRoutes(db: StageDb): Route[] {
 						.values({
 							scopeKey,
 							filePath: body.filePath,
-							side: body.side,
-							startLine: body.startLine,
-							endLine: body.endLine,
+							anchor: body.anchor,
+							side: body.anchor === COMMENT_ANCHOR.LINE ? body.side : null,
+							startLine: body.anchor === COMMENT_ANCHOR.LINE ? body.startLine : null,
+							endLine: body.anchor === COMMENT_ANCHOR.LINE ? body.endLine : null,
 						})
 						.returning()
 						.all();

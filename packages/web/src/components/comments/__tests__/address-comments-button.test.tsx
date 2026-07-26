@@ -1,6 +1,11 @@
 // @vitest-environment happy-dom
 
-import type { Comment, CommentThread } from "@stagereview/types/comments";
+import {
+	COMMENT_ANCHOR,
+	type Comment,
+	type CommentThread,
+	type LineCommentThread,
+} from "@stagereview/types/comments";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { toast } from "@/components/ui/sonner";
@@ -28,10 +33,11 @@ function makeComment(id: string, body: string): Comment {
 	};
 }
 
-function makeThread(over: Partial<CommentThread> = {}): CommentThread {
+function makeThread(over: Partial<LineCommentThread> = {}): LineCommentThread {
 	return {
 		id: "thread-1",
 		filePath: "src/example.ts",
+		anchor: COMMENT_ANCHOR.LINE,
 		side: "additions",
 		startLine: 4,
 		endLine: 4,

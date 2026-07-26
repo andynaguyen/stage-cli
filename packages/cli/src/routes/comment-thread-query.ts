@@ -1,4 +1,4 @@
-import type { Comment, CommentThread } from "@stagereview/types/comments";
+import { COMMENT_ANCHOR, type Comment, type CommentThread } from "@stagereview/types/comments";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import type { StageDb } from "../db/client.js";
 import {
@@ -85,16 +85,32 @@ export function toCommentThread(
 	thread: CommentThreadRow,
 	comments: readonly CommentRow[],
 ): CommentThread {
-	return {
+	const shared = {
 		id: thread.id,
 		filePath: thread.filePath,
-		side: thread.side,
-		startLine: thread.startLine,
-		endLine: thread.endLine,
 		resolvedAt: thread.resolvedAt === null ? null : thread.resolvedAt.toISOString(),
 		createdAt: thread.createdAt.toISOString(),
 		updatedAt: thread.updatedAt.toISOString(),
 		comments: comments.map(toComment),
+	};
+	if (thread.anchor === COMMENT_ANCHOR.FILE) {
+		return {
+			...shared,
+			anchor: COMMENT_ANCHOR.FILE,
+			side: null,
+			startLine: null,
+			endLine: null,
+		};
+	}
+	if (thread.side === null || thread.startLine === null || thread.endLine === null) {
+		throw new Error(`Line comment thread ${thread.id} has an incomplete anchor`);
+	}
+	return {
+		...shared,
+		anchor: COMMENT_ANCHOR.LINE,
+		side: thread.side,
+		startLine: thread.startLine,
+		endLine: thread.endLine,
 	};
 }
 

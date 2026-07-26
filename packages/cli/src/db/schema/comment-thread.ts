@@ -1,3 +1,4 @@
+import { COMMENT_ANCHOR } from "@stagereview/types/comments";
 import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { DIFF_SIDE } from "../../schema.js";
 import { baseColumns } from "./columns.js";
@@ -10,9 +11,12 @@ export const commentThread = sqliteTable(
 		// survive re-imports of the same diff (mirrors how external_id keys view-state).
 		scopeKey: text().notNull(),
 		filePath: text().notNull(),
-		side: text({ enum: [DIFF_SIDE.ADDITIONS, DIFF_SIDE.DELETIONS] }).notNull(),
-		startLine: integer().notNull(),
-		endLine: integer().notNull(),
+		anchor: text({ enum: [COMMENT_ANCHOR.FILE, COMMENT_ANCHOR.LINE] })
+			.default(COMMENT_ANCHOR.LINE)
+			.notNull(),
+		side: text({ enum: [DIFF_SIDE.ADDITIONS, DIFF_SIDE.DELETIONS] }),
+		startLine: integer(),
+		endLine: integer(),
 		/** Null while open; set to the resolution time once resolved. */
 		resolvedAt: integer({ mode: "timestamp_ms" }),
 	},

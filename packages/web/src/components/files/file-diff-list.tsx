@@ -1,8 +1,11 @@
+import { COMMENT_ANCHOR, type FileCommentThread } from "@stagereview/types/comments";
 import { FileCode } from "lucide-react";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { FileHeader } from "@/components/chapter/file-header";
 import { PierreDiffViewer } from "@/components/chapter/pierre-diff-viewer";
 import { findRenderedDiffLine } from "@/components/chapter/rendered-line-target";
+import { FileComments } from "@/components/comments/file-comments";
+import { useCommentThreadsContext } from "@/lib/comment-threads-context";
 import type { AnnotatedLineRef, DiffSide, LineRef } from "@/lib/diff-types";
 import type { FileDiffEntry } from "@/lib/parse-diff";
 import { cn } from "@/lib/utils";
@@ -268,8 +271,17 @@ function FileDiffSection({
 	chapterOverlay,
 }: FileDiffSectionProps) {
 	const { file, diff } = entry;
+	const { threadsByFile } = useCommentThreadsContext();
 	const isCollapsed = collapseState.collapsedFiles.has(file.path);
 	const [isExpanded, setIsExpanded] = useState(false);
+	const [isComposingFileComment, setIsComposingFileComment] = useState(false);
+	const threads = threadsByFile.get(file.path);
+	const fileThreads: FileCommentThread[] = [];
+	if (threads !== undefined) {
+		for (const thread of threads) {
+			if (thread.anchor === COMMENT_ANCHOR.FILE) fileThreads.push(thread);
+		}
+	}
 
 	const handleToggle = useCallback(
 		() => collapseState.toggleFileCollapsed(file.path),
@@ -283,6 +295,10 @@ function FileDiffSection({
 	const handleToggleViewed = useCallback(() => {
 		onToggleViewed?.(file.path);
 	}, [onToggleViewed, file.path]);
+	const handleStartFileComment = useCallback(() => {
+		if (isCollapsed) collapseState.toggleFileCollapsed(file.path);
+		setIsComposingFileComment(true);
+	}, [collapseState, file.path, isCollapsed]);
 
 	return (
 		<div
@@ -298,21 +314,31 @@ function FileDiffSection({
 				onToggle={handleToggle}
 				onToggleAll={handleToggleAll}
 				onToggleExpand={handleToggleExpand}
+				onComment={handleStartFileComment}
 				onToggleViewed={onToggleViewed ? handleToggleViewed : undefined}
 			/>
 			{!isCollapsed && (
-				<PierreDiffViewer
-					fileDiff={diff}
-					filePath={file.path}
-					expandUnchanged={isExpanded}
-					allLineRefsByFile={chapterOverlay?.allLineRefsByFile}
-					focusedLineRefsByFile={chapterOverlay?.focusedLineRefsByFile}
-					focusedKeyChangeId={chapterOverlay?.focusedKeyChangeId ?? null}
-					isKeyChangeChecked={chapterOverlay?.isKeyChangeChecked}
-					onMarkKeyChangeChecked={chapterOverlay?.onMarkKeyChangeChecked}
-					onUnmarkKeyChangeChecked={chapterOverlay?.onUnmarkKeyChangeChecked}
-					onFocusKeyChange={chapterOverlay?.onFocusKeyChange}
-				/>
+				<>
+					<FileComments
+						filePath={file.path}
+						threads={fileThreads}
+						isComposing={isComposingFileComment}
+						onCancel={() => setIsComposingFileComment(false)}
+						onCreated={() => setIsComposingFileComment(false)}
+					/>
+					<PierreDiffViewer
+						fileDiff={diff}
+						filePath={file.path}
+						expandUnchanged={isExpanded}
+						allLineRefsByFile={chapterOverlay?.allLineRefsByFile}
+						focusedLineRefsByFile={chapterOverlay?.focusedLineRefsByFile}
+						focusedKeyChangeId={chapterOverlay?.focusedKeyChangeId ?? null}
+						isKeyChangeChecked={chapterOverlay?.isKeyChangeChecked}
+						onMarkKeyChangeChecked={chapterOverlay?.onMarkKeyChangeChecked}
+						onUnmarkKeyChangeChecked={chapterOverlay?.onUnmarkKeyChangeChecked}
+						onFocusKeyChange={chapterOverlay?.onFocusKeyChange}
+					/>
+				</>
 			)}
 		</div>
 	);

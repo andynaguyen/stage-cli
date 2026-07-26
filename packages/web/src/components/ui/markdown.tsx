@@ -1,4 +1,4 @@
-import { type ComponentPropsWithoutRef, memo } from "react";
+import { type ComponentPropsWithoutRef, memo, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
@@ -16,6 +16,8 @@ interface MarkdownProps {
 	 * commonly contain HTML badge blocks (`<picture>`/`<img>` from bots).
 	 */
 	allowHtml?: boolean;
+	/** Return true to handle a link inside the app instead of opening its href. */
+	onLinkClick?: (href: string) => boolean;
 }
 
 // Extend rehype-sanitize's GitHub schema to keep the `<picture>`/`<source>` image
@@ -53,14 +55,35 @@ const pre = ({ className, ...props }: ComponentPropsWithoutRef<"pre">) => (
 	/>
 );
 
-const a = ({ className, ...props }: ComponentPropsWithoutRef<"a">) => (
-	<a
-		className={cn("text-primary underline-offset-2 hover:underline", className)}
-		target="_blank"
-		rel="noopener noreferrer"
-		{...props}
-	/>
-);
+interface MarkdownLinkProps extends ComponentPropsWithoutRef<"a"> {
+	handleHref?: (href: string) => boolean;
+}
+
+function MarkdownLink({ className, href, onClick, handleHref, ...props }: MarkdownLinkProps) {
+	return (
+		<a
+			className={cn("text-primary underline-offset-2 hover:underline", className)}
+			href={href}
+			target="_blank"
+			rel="noopener noreferrer"
+			onClick={(event) => {
+				onClick?.(event);
+				if (!event.defaultPrevented && href !== undefined && handleHref?.(href) === true) {
+					event.preventDefault();
+				}
+			}}
+			{...props}
+		/>
+	);
+}
+
+const a = (props: ComponentPropsWithoutRef<"a">) => <MarkdownLink {...props} />;
+
+function createHandledLink(onLinkClick: (href: string) => boolean) {
+	return function HandledLink(props: ComponentPropsWithoutRef<"a">) {
+		return <MarkdownLink {...props} handleHref={onLinkClick} />;
+	};
+}
 
 const p = ({ className, ...props }: ComponentPropsWithoutRef<"p">) => (
 	<p
@@ -97,7 +120,11 @@ const img = ({ className, alt, ...props }: ComponentPropsWithoutRef<"img">) => (
 
 const components = { code, pre, a, p, ul, ol, li, blockquote, img };
 
-function MarkdownImpl({ content, className, inheritSize, allowHtml }: MarkdownProps) {
+function MarkdownImpl({ content, className, inheritSize, allowHtml, onLinkClick }: MarkdownProps) {
+	const markdownComponents = useMemo(
+		() => (onLinkClick ? { ...components, a: createHandledLink(onLinkClick) } : components),
+		[onLinkClick],
+	);
 	return (
 		<div
 			className={cn(
@@ -108,7 +135,7 @@ function MarkdownImpl({ content, className, inheritSize, allowHtml }: MarkdownPr
 			<ReactMarkdown
 				remarkPlugins={[remarkGfm]}
 				rehypePlugins={allowHtml ? [rehypeRaw, [rehypeSanitize, htmlSchema]] : undefined}
-				components={components}
+				components={markdownComponents}
 			>
 				{content}
 			</ReactMarkdown>

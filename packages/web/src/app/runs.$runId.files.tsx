@@ -3,6 +3,7 @@ import { z } from "zod";
 import { FilesPage } from "@/routes/files-page";
 
 const FilesSearchSchema = z.object({
+	file: z.string().min(1).optional(),
 	thread: z.string().min(1).optional(),
 });
 
@@ -13,6 +14,6 @@ export const Route = createFileRoute("/runs/$runId/files")({
 
 function FilesRoute() {
 	const { runId } = Route.useParams();
-	const { thread } = Route.useSearch();
-	return <FilesPage runId={runId} focusedThreadId={thread} />;
+	const { file, thread } = Route.useSearch();
+	return <FilesPage runId={runId} focusedFilePath={file} focusedThreadId={thread} />;
 }

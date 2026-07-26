@@ -51,6 +51,7 @@ interface AskAgentConfigurationContextValue {
 }
 
 interface AskAgentConversationContextValue {
+	runId: string;
 	messages: AgentChatMessage[];
 	pendingSelection: AgentSelection | null;
 	pendingPermissions: AgentPendingPermission[];
@@ -349,6 +350,7 @@ export function AskAgentProvider({
 	);
 	const conversationValue = useMemo<AskAgentConversationContextValue>(
 		() => ({
+			runId,
 			messages,
 			pendingSelection,
 			pendingPermissions,
@@ -367,6 +369,7 @@ export function AskAgentProvider({
 			pendingSelection,
 			reset,
 			respondToPermission,
+			runId,
 			send,
 			stop,
 		],

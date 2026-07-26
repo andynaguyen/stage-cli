@@ -1,6 +1,6 @@
 import type { DiffLineAnnotation, SelectedLineRange } from "@pierre/diffs";
 import type { DiffSide } from "@/lib/diff-types";
-import type { CommentThread } from "@/lib/use-comment-threads";
+import type { LineCommentThread } from "@/lib/use-comment-threads";
 
 /** An in-progress comment the reviewer is composing, anchored to a line range. */
 export interface CommentDraft {
@@ -91,11 +91,11 @@ export function upsertDraft(drafts: readonly DraftState[], anchor: CommentDraft)
  * Pierre renders a row (existing comments and/or a composer) directly below the line.
  */
 export function buildCommentAnnotations(
-	threads: readonly CommentThread[],
+	threads: readonly LineCommentThread[],
 	drafts: readonly CommentDraft[],
-): DiffLineAnnotation<CommentThread[]>[] {
-	const bySideLine = new Map<DiffSide, Map<number, DiffLineAnnotation<CommentThread[]>>>();
-	const ensure = (side: DiffSide, line: number): DiffLineAnnotation<CommentThread[]> => {
+): DiffLineAnnotation<LineCommentThread[]>[] {
+	const bySideLine = new Map<DiffSide, Map<number, DiffLineAnnotation<LineCommentThread[]>>>();
+	const ensure = (side: DiffSide, line: number): DiffLineAnnotation<LineCommentThread[]> => {
 		let byLine = bySideLine.get(side);
 		if (!byLine) {
 			byLine = new Map();
@@ -110,7 +110,7 @@ export function buildCommentAnnotations(
 	};
 	for (const thread of threads) ensure(thread.side, thread.endLine).metadata.push(thread);
 	for (const draft of drafts) ensure(draft.side, draft.endLine);
-	const out: DiffLineAnnotation<CommentThread[]>[] = [];
+	const out: DiffLineAnnotation<LineCommentThread[]>[] = [];
 	for (const byLine of bySideLine.values()) {
 		for (const entry of byLine.values()) out.push(entry);
 	}

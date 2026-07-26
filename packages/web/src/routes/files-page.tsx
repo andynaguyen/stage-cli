@@ -16,10 +16,11 @@ const NO_COMMENT_COUNTS: Map<string, number> = new Map();
 
 interface FilesPageProps {
 	runId: string;
+	focusedFilePath?: string;
 	focusedThreadId?: string;
 }
 
-export function FilesPage({ runId, focusedThreadId }: FilesPageProps) {
+export function FilesPage({ runId, focusedFilePath, focusedThreadId }: FilesPageProps) {
 	const { data: diffData, isLoading, error } = useDiffPatch(runId);
 	const { threads } = useCommentThreadsContext();
 
@@ -80,6 +81,14 @@ export function FilesPage({ runId, focusedThreadId }: FilesPageProps) {
 		scrollToCommentThread({ id: focusedThreadId, filePath: focusedThreadPath });
 		return cancelScrollToLine;
 	}, [diffData, focusedThreadId, focusedThreadPath, scrollToCommentThread, cancelScrollToLine]);
+
+	useEffect(() => {
+		if (diffData === undefined || focusedFilePath === undefined || focusedThreadId !== undefined) {
+			return;
+		}
+		handleSelectFile(focusedFilePath);
+		return cancelScrollToLine;
+	}, [diffData, focusedFilePath, focusedThreadId, handleSelectFile, cancelScrollToLine]);
 
 	const viewed = useMemo<ViewedConfig>(
 		() => ({

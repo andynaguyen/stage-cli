@@ -1,4 +1,5 @@
 import type { AgentSelection } from "@stagereview/types/agent";
+import { useNavigate } from "@tanstack/react-router";
 import {
 	AlertCircle,
 	Bot,
@@ -8,15 +9,18 @@ import {
 	ShieldAlert,
 	Terminal,
 } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { Markdown } from "@/components/ui/markdown";
-import { useAskAgentConversation } from "@/lib/agent-chat-context";
+import { useAskAgentConversation, useAskAgentPanel } from "@/lib/agent-chat-context";
 import {
 	AGENT_ACTIVITY_PHASE,
 	AGENT_MESSAGE_STATUS,
 	type AgentChatActivity,
 	type AgentChatMessage,
 } from "@/lib/agent-chat-message";
+import { resolveChangedFileLink } from "@/lib/agent-file-navigation";
+import { useFileDiffEntries } from "@/lib/parse-diff";
+import { useDiffPatch } from "@/lib/use-diff-patch";
 
 export function AgentSelectionLabel({ selection }: { selection: AgentSelection }) {
 	const side = selection.side === "additions" ? "new" : "old";
@@ -57,7 +61,32 @@ function ActivityRow({ activity }: { activity: AgentChatActivity }) {
 	);
 }
 
-function AssistantMessage({ message }: { message: AgentChatMessage }) {
+interface AgentAnswerProps {
+	content: string;
+	filePaths: readonly string[];
+	onSelectFile: (filePath: string) => void;
+}
+
+export function AgentAnswer({ content, filePaths, onSelectFile }: AgentAnswerProps) {
+	const handleLinkClick = (href: string) => {
+		const filePath = resolveChangedFileLink(href, filePaths);
+		if (filePath === null) return false;
+		onSelectFile(filePath);
+		return true;
+	};
+
+	return (
+		<Markdown content={content} className="text-foreground/90" onLinkClick={handleLinkClick} />
+	);
+}
+
+interface AssistantMessageProps {
+	message: AgentChatMessage;
+	filePaths: readonly string[];
+	onSelectFile: (filePath: string) => void;
+}
+
+function AssistantMessage({ message, filePaths, onSelectFile }: AssistantMessageProps) {
 	const isThinking =
 		message.status === AGENT_MESSAGE_STATUS.STREAMING && message.content.length === 0;
 	return (
@@ -67,7 +96,11 @@ function AssistantMessage({ message }: { message: AgentChatMessage }) {
 			</div>
 			<div className="min-w-0 flex-1">
 				{message.content.length > 0 && (
-					<Markdown content={message.content} className="text-foreground/90" />
+					<AgentAnswer
+						content={message.content}
+						filePaths={filePaths}
+						onSelectFile={onSelectFile}
+					/>
 				)}
 				{isThinking && (
 					<div className="flex items-center gap-2 py-1 text-muted-foreground text-sm">
@@ -119,7 +152,23 @@ function UserMessage({ message }: { message: AgentChatMessage }) {
 }
 
 export function AgentConversation() {
-	const { messages } = useAskAgentConversation();
+	const { messages, runId } = useAskAgentConversation();
+	const { close } = useAskAgentPanel();
+	const navigate = useNavigate();
+	const { data: diffData } = useDiffPatch(runId);
+	const fileEntries = useFileDiffEntries(diffData?.patch, diffData?.fileContents);
+	const filePaths = useMemo(() => fileEntries.map((entry) => entry.file.path), [fileEntries]);
+	const handleSelectFile = useCallback(
+		(filePath: string) => {
+			close();
+			void navigate({
+				to: "/runs/$runId/files",
+				params: { runId },
+				search: { file: filePath },
+			});
+		},
+		[close, navigate, runId],
+	);
 	const endRef = useRef<HTMLDivElement>(null);
 	const lastMessage = messages.at(-1);
 
@@ -133,7 +182,12 @@ export function AgentConversation() {
 				message.role === "user" ? (
 					<UserMessage key={message.id} message={message} />
 				) : (
-					<AssistantMessage key={message.id} message={message} />
+					<AssistantMessage
+						key={message.id}
+						message={message}
+						filePaths={filePaths}
+						onSelectFile={handleSelectFile}
+					/>
 				),
 			)}
 			<div ref={endRef} />

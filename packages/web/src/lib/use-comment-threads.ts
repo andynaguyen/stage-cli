@@ -3,12 +3,20 @@ import {
 	type CommentThread,
 	CommentThreadsResponseSchema,
 	type CreateCommentThreadBody,
+	type FileCommentThread,
+	type LineCommentThread,
 } from "@stagereview/types/comments";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { jsonFetch } from "./use-view-state";
 
-export type { Comment, CommentThread, CreateCommentThreadBody };
+export type {
+	Comment,
+	CommentThread,
+	CreateCommentThreadBody,
+	FileCommentThread,
+	LineCommentThread,
+};
 
 const COMMENT_THREADS_ROOT = "comment-threads";
 
