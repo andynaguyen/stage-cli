@@ -1,4 +1,3 @@
-import { COMMENT_ANCHOR, type FileCommentThread } from "@stagereview/types/comments";
 import { FileCode } from "lucide-react";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { FileHeader } from "@/components/chapter/file-header";
@@ -8,6 +7,7 @@ import { FileComments } from "@/components/comments/file-comments";
 import { useCommentThreadsContext } from "@/lib/comment-threads-context";
 import type { AnnotatedLineRef, DiffSide, LineRef } from "@/lib/diff-types";
 import type { FileDiffEntry } from "@/lib/parse-diff";
+import type { CommentThreadsForFile } from "@/lib/use-comment-threads";
 import { cn } from "@/lib/utils";
 
 export interface CommentThreadTarget {
@@ -58,6 +58,7 @@ interface FileDiffListProps {
 const FILE_TOP_PADDING = 16;
 const SCROLL_TO_LINE_POLL_MS = 100;
 const SCROLL_TO_LINE_TIMEOUT_MS = 3000;
+const NO_COMMENT_THREADS: CommentThreadsForFile = { fileThreads: [], lineThreads: [] };
 
 function findCommentThreadElement(
 	fileContainer: HTMLElement,
@@ -276,12 +277,7 @@ function FileDiffSection({
 	const [isExpanded, setIsExpanded] = useState(false);
 	const [isComposingFileComment, setIsComposingFileComment] = useState(false);
 	const threads = threadsByFile.get(file.path);
-	const fileThreads: FileCommentThread[] = [];
-	if (threads !== undefined) {
-		for (const thread of threads) {
-			if (thread.anchor === COMMENT_ANCHOR.FILE) fileThreads.push(thread);
-		}
-	}
+	const { fileThreads, lineThreads } = threads === undefined ? NO_COMMENT_THREADS : threads;
 
 	const handleToggle = useCallback(
 		() => collapseState.toggleFileCollapsed(file.path),
@@ -329,6 +325,7 @@ function FileDiffSection({
 					<PierreDiffViewer
 						fileDiff={diff}
 						filePath={file.path}
+						lineThreads={lineThreads}
 						expandUnchanged={isExpanded}
 						allLineRefsByFile={chapterOverlay?.allLineRefsByFile}
 						focusedLineRefsByFile={chapterOverlay?.focusedLineRefsByFile}

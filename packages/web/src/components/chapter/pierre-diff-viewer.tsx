@@ -115,6 +115,7 @@ export function getVisibleLineRange(
 
 type PierreDiffViewerProps = {
 	filePath?: string;
+	lineThreads: readonly LineCommentThread[];
 	selectedLines?: SelectedLineRange | null;
 	expandUnchanged?: boolean;
 	/** All key change line refs grouped by file path. */
@@ -158,6 +159,7 @@ export function PierreDiffViewer({
 	patch,
 	fileDiff,
 	filePath,
+	lineThreads,
 	selectedLines: selectedLinesProp,
 	expandUnchanged = false,
 	allLineRefsByFile,
@@ -197,17 +199,8 @@ export function PierreDiffViewer({
 	}, [allLineRefsByFile, filePath]);
 
 	// ---- Line-anchored comments ----
-	const comments = useCommentThreadsContext();
+	const { createThread } = useCommentThreadsContext();
 	const askAgent = useOptionalAskAgentSelection();
-	const { createThread } = comments;
-	const lineThreads = useMemo(() => {
-		if (!filePath) return [];
-		const threads = comments.threadsByFile.get(filePath);
-		if (threads === undefined) return [];
-		return threads.filter(
-			(thread): thread is LineCommentThread => thread.anchor === COMMENT_ANCHOR.LINE,
-		);
-	}, [comments.threadsByFile, filePath]);
 	// In-progress comment composers, one per anchor row — several can be open at once.
 	const [drafts, setDrafts] = useState<DraftState[]>([]);
 	const [activeDraft, setActiveDraft] = useState<CommentDraft | null>(null);
