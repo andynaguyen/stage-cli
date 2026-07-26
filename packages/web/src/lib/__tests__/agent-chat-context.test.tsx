@@ -31,6 +31,7 @@ vi.mock("../agent-api", () => ({
 }));
 
 const SESSION_ID = "123e4567-e89b-12d3-a456-426614174000";
+const TEST_FILE_NAVIGATION = { filePaths: [], onSelectFile: vi.fn() };
 let selectionConsumerRenders = 0;
 let configurationConsumerRenders = 0;
 
@@ -61,6 +62,23 @@ function FocusHarness() {
 				Open panel
 			</button>
 			{isOpen && <textarea ref={composerRef} aria-label="Agent question" />}
+		</>
+	);
+}
+
+function FileNavigationHarness() {
+	const { fileNavigation } = useAskAgentConversation();
+	const { isOpen, open } = useAskAgentPanel();
+	return (
+		<>
+			<button type="button" onClick={open}>
+				Open panel
+			</button>
+			<button type="button" onClick={() => fileNavigation.onSelectFile("src/example.ts")}>
+				Select file
+			</button>
+			<output data-testid="panel-state">{isOpen ? "open" : "closed"}</output>
+			<output data-testid="file-paths">{fileNavigation.filePaths.join(",")}</output>
 		</>
 	);
 }
@@ -202,7 +220,7 @@ describe("AskAgentProvider", () => {
 			},
 		);
 		renderWithQueryClient(
-			<AskAgentProvider runId="run-1">
+			<AskAgentProvider runId="run-1" fileNavigation={TEST_FILE_NAVIGATION}>
 				<Harness />
 				<SelectionConsumer />
 				<ConfigurationConsumer />
@@ -223,7 +241,7 @@ describe("AskAgentProvider", () => {
 
 	it("focuses the composer when opening mounts it", async () => {
 		renderWithQueryClient(
-			<AskAgentProvider runId="run-1">
+			<AskAgentProvider runId="run-1" fileNavigation={TEST_FILE_NAVIGATION}>
 				<FocusHarness />
 			</AskAgentProvider>,
 		);
@@ -232,6 +250,26 @@ describe("AskAgentProvider", () => {
 
 		const composer = await screen.findByRole("textbox", { name: "Agent question" });
 		expect(document.activeElement).toBe(composer);
+	});
+
+	it("owns file navigation and closes the panel before selecting", () => {
+		const onSelectFile = vi.fn();
+		renderWithQueryClient(
+			<AskAgentProvider
+				runId="run-1"
+				fileNavigation={{ filePaths: ["src/example.ts"], onSelectFile }}
+			>
+				<FileNavigationHarness />
+			</AskAgentProvider>,
+		);
+
+		fireEvent.click(screen.getByRole("button", { name: "Open panel" }));
+		expect(screen.getByTestId("panel-state").textContent).toBe("open");
+		expect(screen.getByTestId("file-paths").textContent).toBe("src/example.ts");
+
+		fireEvent.click(screen.getByRole("button", { name: "Select file" }));
+		expect(onSelectFile).toHaveBeenCalledWith("src/example.ts");
+		expect(screen.getByTestId("panel-state").textContent).toBe("closed");
 	});
 
 	it("prevents two turns from starting in the same render", async () => {
@@ -246,7 +284,7 @@ describe("AskAgentProvider", () => {
 				}),
 		);
 		renderWithQueryClient(
-			<AskAgentProvider runId="run-1">
+			<AskAgentProvider runId="run-1" fileNavigation={TEST_FILE_NAVIGATION}>
 				<Harness />
 			</AskAgentProvider>,
 		);
@@ -271,7 +309,7 @@ describe("AskAgentProvider", () => {
 			},
 		);
 		renderWithQueryClient(
-			<AskAgentProvider runId="run-1">
+			<AskAgentProvider runId="run-1" fileNavigation={TEST_FILE_NAVIGATION}>
 				<Harness />
 			</AskAgentProvider>,
 		);
@@ -300,7 +338,7 @@ describe("AskAgentProvider", () => {
 	it("can retry capability detection after the local setup changes", async () => {
 		vi.mocked(getAgentCapabilities).mockRejectedValueOnce(new Error("Codex is not ready"));
 		renderWithQueryClient(
-			<AskAgentProvider runId="run-1">
+			<AskAgentProvider runId="run-1" fileNavigation={TEST_FILE_NAVIGATION}>
 				<Harness />
 			</AskAgentProvider>,
 		);
@@ -319,7 +357,7 @@ describe("AskAgentProvider", () => {
 			},
 		);
 		renderWithQueryClient(
-			<AskAgentProvider runId="run-1">
+			<AskAgentProvider runId="run-1" fileNavigation={TEST_FILE_NAVIGATION}>
 				<Harness />
 			</AskAgentProvider>,
 		);

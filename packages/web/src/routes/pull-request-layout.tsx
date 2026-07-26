@@ -9,7 +9,7 @@ import { PullRequestHeaderSkeleton } from "@/components/pull-request/pull-reques
 import { SectionLabel } from "@/components/pull-request/section-label";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { AskAgentProvider } from "@/lib/agent-chat-context";
+import { type AskAgentFileNavigation, AskAgentProvider } from "@/lib/agent-chat-context";
 import { ChapterProvider } from "@/lib/chapter-context";
 import { CollapseActionsProvider, useCollapseActionsFromNav } from "@/lib/collapse-actions-context";
 import { useFileDiffEntries } from "@/lib/parse-diff";
@@ -161,6 +161,7 @@ export function PullRequestLayout({ runId }: { runId: string }) {
 	// user clicks into the tab; react-query dedupes the same fetch from FilesPage.
 	const { data: diffData } = useDiffPatch(runId);
 	const fileEntries = useFileDiffEntries(diffData?.patch, diffData?.fileContents);
+	const filePaths = useMemo(() => fileEntries.map((entry) => entry.file.path), [fileEntries]);
 	const totalFileCount = fileEntries.length;
 	const viewedFileCount = useMemo(() => {
 		if (totalFileCount === 0) return 0;
@@ -194,6 +195,20 @@ export function PullRequestLayout({ runId }: { runId: string }) {
 			});
 		},
 		[navigate, runId],
+	);
+	const handleSelectAgentFile = useCallback(
+		(filePath: string) => {
+			void navigate({
+				to: "/runs/$runId/files",
+				params: { runId },
+				search: { file: filePath },
+			});
+		},
+		[navigate, runId],
+	);
+	const agentFileNavigation = useMemo<AskAgentFileNavigation>(
+		() => ({ filePaths, onSelectFile: handleSelectAgentFile }),
+		[filePaths, handleSelectAgentFile],
 	);
 
 	// Page-scroll tabs read `--content-top` (topbar + sticky nav) to pin their own
@@ -239,7 +254,7 @@ export function PullRequestLayout({ runId }: { runId: string }) {
 	if (error) return <ErrorState error={error} />;
 
 	return (
-		<AskAgentProvider runId={runId}>
+		<AskAgentProvider runId={runId} fileNavigation={agentFileNavigation}>
 			<CollapseActionsProvider>
 				<AskAgentShell>
 					<div

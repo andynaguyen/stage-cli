@@ -1,5 +1,4 @@
 import type { AgentSelection } from "@stagereview/types/agent";
-import { useNavigate } from "@tanstack/react-router";
 import {
 	AlertCircle,
 	Bot,
@@ -9,9 +8,9 @@ import {
 	ShieldAlert,
 	Terminal,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { Markdown } from "@/components/ui/markdown";
-import { useAskAgentConversation, useAskAgentPanel } from "@/lib/agent-chat-context";
+import { useAskAgentConversation } from "@/lib/agent-chat-context";
 import {
 	AGENT_ACTIVITY_PHASE,
 	AGENT_MESSAGE_STATUS,
@@ -19,8 +18,6 @@ import {
 	type AgentChatMessage,
 } from "@/lib/agent-chat-message";
 import { resolveChangedFileLink } from "@/lib/agent-file-navigation";
-import { useFileDiffEntries } from "@/lib/parse-diff";
-import { useDiffPatch } from "@/lib/use-diff-patch";
 
 export function AgentSelectionLabel({ selection }: { selection: AgentSelection }) {
 	const side = selection.side === "additions" ? "new" : "old";
@@ -152,23 +149,7 @@ function UserMessage({ message }: { message: AgentChatMessage }) {
 }
 
 export function AgentConversation() {
-	const { messages, runId } = useAskAgentConversation();
-	const { close } = useAskAgentPanel();
-	const navigate = useNavigate();
-	const { data: diffData } = useDiffPatch(runId);
-	const fileEntries = useFileDiffEntries(diffData?.patch, diffData?.fileContents);
-	const filePaths = useMemo(() => fileEntries.map((entry) => entry.file.path), [fileEntries]);
-	const handleSelectFile = useCallback(
-		(filePath: string) => {
-			close();
-			void navigate({
-				to: "/runs/$runId/files",
-				params: { runId },
-				search: { file: filePath },
-			});
-		},
-		[close, navigate, runId],
-	);
+	const { messages, fileNavigation } = useAskAgentConversation();
 	const endRef = useRef<HTMLDivElement>(null);
 	const lastMessage = messages.at(-1);
 
@@ -185,8 +166,8 @@ export function AgentConversation() {
 					<AssistantMessage
 						key={message.id}
 						message={message}
-						filePaths={filePaths}
-						onSelectFile={handleSelectFile}
+						filePaths={fileNavigation.filePaths}
+						onSelectFile={fileNavigation.onSelectFile}
 					/>
 				),
 			)}
