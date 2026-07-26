@@ -21,8 +21,9 @@ function makeResult(feedback: string): ReviewFeedbackExport {
 }
 
 describe("ReviewFeedbackSession", () => {
-	it("resolves only after the successful submission is acknowledged", async () => {
+	it("persists before acknowledgement and resolves after acknowledgement", async () => {
 		const session = new ReviewFeedbackSession(WORKING_TREE_SCOPE);
+		let persisted = false;
 		let releaseAcknowledgement = () => {};
 		const acknowledgement = new Promise<void>((resolve) => {
 			releaseAcknowledgement = resolve;
@@ -32,29 +33,64 @@ describe("ReviewFeedbackSession", () => {
 			feedbackResolved = true;
 		});
 
-		const completion = session.complete(makeResult("feedback"), () => acknowledgement);
+		const completion = session.complete(makeResult("feedback"), {
+			persist: () => {
+				persisted = true;
+			},
+			acknowledge: () => acknowledgement,
+		});
 		await Promise.resolve();
 
+		expect(persisted).toBe(true);
 		expect(feedbackResolved).toBe(false);
-		await expect(session.complete(makeResult("conflict"), async () => {})).rejects.toBeInstanceOf(
-			ReviewSessionConflictError,
-		);
+		await expect(
+			session.complete(makeResult("conflict"), {
+				persist: () => {},
+				acknowledge: async () => {},
+			}),
+		).rejects.toBeInstanceOf(ReviewSessionConflictError);
 
 		releaseAcknowledgement();
 		await completion;
 		await expect(session.result).resolves.toEqual(makeResult("feedback"));
 	});
 
-	it("returns to pending when acknowledgement fails", async () => {
+	it("returns to pending when persistence fails", async () => {
 		const session = new ReviewFeedbackSession(WORKING_TREE_SCOPE);
 
 		await expect(
-			session.complete(makeResult("lost"), async () => {
-				throw new Error("response failed");
+			session.complete(makeResult("lost"), {
+				persist: () => {
+					throw new Error("database failed");
+				},
+				acknowledge: async () => {},
+			}),
+		).rejects.toThrow("database failed");
+
+		await session.complete(makeResult("retried"), {
+			persist: () => {},
+			acknowledge: async () => {},
+		});
+		await expect(session.result).resolves.toEqual(makeResult("retried"));
+	});
+
+	it("keeps persisted feedback completed when acknowledgement fails", async () => {
+		const session = new ReviewFeedbackSession(WORKING_TREE_SCOPE);
+
+		await expect(
+			session.complete(makeResult("submitted"), {
+				persist: () => {},
+				acknowledge: async () => {
+					throw new Error("response failed");
+				},
 			}),
 		).rejects.toThrow("response failed");
-
-		await session.complete(makeResult("retried"), async () => {});
-		await expect(session.result).resolves.toEqual(makeResult("retried"));
+		await expect(session.result).resolves.toEqual(makeResult("submitted"));
+		await expect(
+			session.complete(makeResult("duplicate"), {
+				persist: () => {},
+				acknowledge: async () => {},
+			}),
+		).rejects.toBeInstanceOf(ReviewSessionConflictError);
 	});
 });

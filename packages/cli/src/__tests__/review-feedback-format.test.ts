@@ -1,4 +1,4 @@
-import type { Comment, CommentThread } from "@stagereview/types/comments";
+import { COMMENT_ANCHOR, type Comment, type LineCommentThread } from "@stagereview/types/comments";
 import { describe, expect, it } from "vitest";
 import {
 	buildEmptyReviewFeedbackExport,
@@ -32,10 +32,11 @@ function makeComment(over: Partial<Comment> = {}): Comment {
 	};
 }
 
-function makeThread(over: Partial<CommentThread> = {}): CommentThread {
+function makeThread(over: Partial<LineCommentThread> = {}): LineCommentThread {
 	return {
 		id: "thread-1",
 		filePath: "src/example.ts",
+		anchor: COMMENT_ANCHOR.LINE,
 		side: "additions",
 		startLine: 4,
 		endLine: 4,

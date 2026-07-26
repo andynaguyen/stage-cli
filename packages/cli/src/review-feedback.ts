@@ -1,4 +1,9 @@
-import type { Comment, CommentThread } from "@stagereview/types/comments";
+import {
+	COMMENT_ANCHOR,
+	type Comment,
+	type CommentThread,
+	type LineCommentThread,
+} from "@stagereview/types/comments";
 import {
 	REVIEW_ANNOTATION_SIDE,
 	REVIEW_ANNOTATION_TYPE,
@@ -20,6 +25,11 @@ const COMPLETION_STATE = {
 } as const;
 
 type CompletionState = (typeof COMPLETION_STATE)[keyof typeof COMPLETION_STATE];
+
+export interface ReviewFeedbackCompletion {
+	persist: () => void | Promise<void>;
+	acknowledge: () => Promise<void>;
+}
 
 const WORKING_TREE_REVIEW_LABEL = {
 	[WORKING_TREE_REF.WORK]: {
@@ -64,21 +74,28 @@ export class ReviewFeedbackSession {
 		this.resolveResult = resolveResult;
 	}
 
-	async complete(result: ReviewFeedbackExport, acknowledge: () => Promise<void>): Promise<void> {
+	async complete(
+		result: ReviewFeedbackExport,
+		completion: ReviewFeedbackCompletion,
+	): Promise<void> {
 		if (this.state !== COMPLETION_STATE.PENDING) {
 			throw new ReviewSessionConflictError();
 		}
 
 		this.state = COMPLETION_STATE.COMPLETING;
 		try {
-			await acknowledge();
+			await completion.persist();
 		} catch (error) {
 			this.state = COMPLETION_STATE.PENDING;
 			throw error;
 		}
 
 		this.state = COMPLETION_STATE.COMPLETED;
-		this.resolveResult(result);
+		try {
+			await completion.acknowledge();
+		} finally {
+			this.resolveResult(result);
+		}
 	}
 }
 
@@ -145,14 +162,17 @@ function formatReviewFeedback(scope: Scope, threads: readonly CommentThread[]): 
 }
 
 function compareThreads(left: CommentThread, right: CommentThread): number {
-	return (
-		compareText(left.filePath, right.filePath) ||
-		left.startLine - right.startLine ||
-		left.endLine - right.endLine ||
-		compareText(left.side, right.side) ||
-		compareText(left.createdAt, right.createdAt) ||
-		compareText(left.id, right.id)
-	);
+	const fileOrder = compareText(left.filePath, right.filePath);
+	if (fileOrder !== 0) return fileOrder;
+	if (left.anchor !== right.anchor) return left.anchor === COMMENT_ANCHOR.FILE ? -1 : 1;
+	if (left.anchor === COMMENT_ANCHOR.LINE && right.anchor === COMMENT_ANCHOR.LINE) {
+		const lineOrder =
+			left.startLine - right.startLine ||
+			left.endLine - right.endLine ||
+			compareText(left.side, right.side);
+		if (lineOrder !== 0) return lineOrder;
+	}
+	return compareText(left.createdAt, right.createdAt) || compareText(left.id, right.id);
 }
 
 function compareText(left: string, right: string): number {
@@ -162,30 +182,36 @@ function compareText(left: string, right: string): number {
 }
 
 function formatThread(thread: CommentThread): string {
-	const range =
-		thread.startLine === thread.endLine
-			? `L${thread.startLine}`
-			: `L${thread.startLine}-${thread.endLine}`;
+	const heading = (() => {
+		if (thread.anchor === COMMENT_ANCHOR.FILE) return "File comment";
+		const range =
+			thread.startLine === thread.endLine
+				? `L${thread.startLine}`
+				: `L${thread.startLine}-${thread.endLine}`;
+		return `${range} (${formatSide(thread.side)})`;
+	})();
 	const comments = sortComments(thread.comments).map((comment) => comment.body);
 
-	return [`### ${range} (${formatSide(thread.side)})`, ...comments].join("\n\n");
+	return [`### ${heading}`, ...comments].join("\n\n");
 }
 
 function formatAnnotations(threads: readonly CommentThread[]): ReviewFeedbackAnnotation[] {
 	return threads.flatMap((thread) =>
-		sortComments(thread.comments).map((comment) => ({
-			id: comment.id,
-			threadId: thread.id,
-			type: REVIEW_ANNOTATION_TYPE.COMMENT,
-			filePath: thread.filePath,
-			lineStart: thread.startLine,
-			lineEnd: thread.endLine,
-			side: formatSide(thread.side),
-			text: comment.body,
-			authorId: comment.authorId,
-			createdAt: comment.createdAt,
-			updatedAt: comment.updatedAt,
-		})),
+		thread.anchor === COMMENT_ANCHOR.FILE
+			? []
+			: sortComments(thread.comments).map((comment) => ({
+					id: comment.id,
+					threadId: thread.id,
+					type: REVIEW_ANNOTATION_TYPE.COMMENT,
+					filePath: thread.filePath,
+					lineStart: thread.startLine,
+					lineEnd: thread.endLine,
+					side: formatSide(thread.side),
+					text: comment.body,
+					authorId: comment.authorId,
+					createdAt: comment.createdAt,
+					updatedAt: comment.updatedAt,
+				})),
 	);
 }
 
@@ -195,7 +221,7 @@ function sortComments(comments: readonly Comment[]): Comment[] {
 	);
 }
 
-function formatSide(side: CommentThread["side"]): ReviewFeedbackAnnotation["side"] {
+function formatSide(side: LineCommentThread["side"]): ReviewFeedbackAnnotation["side"] {
 	switch (side) {
 		case DIFF_SIDE.ADDITIONS:
 			return REVIEW_ANNOTATION_SIDE.NEW;

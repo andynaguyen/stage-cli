@@ -51,6 +51,7 @@ interface AskAgentConfigurationContextValue {
 }
 
 interface AskAgentConversationContextValue {
+	fileNavigation: AskAgentFileNavigation;
 	messages: AgentChatMessage[];
 	pendingSelection: AgentSelection | null;
 	pendingPermissions: AgentPendingPermission[];
@@ -63,6 +64,11 @@ interface AskAgentConversationContextValue {
 		requestId: string | number,
 		decision: AgentPermissionDecision,
 	) => Promise<void>;
+}
+
+export interface AskAgentFileNavigation {
+	filePaths: readonly string[];
+	onSelectFile: (filePath: string) => void;
 }
 
 interface AskAgentSelectionContextValue {
@@ -86,12 +92,14 @@ interface AgentModelConfiguration {
 
 interface AskAgentProviderProps {
 	runId: string;
+	fileNavigation: AskAgentFileNavigation;
 	providerId?: AgentProviderId;
 	children: ReactNode;
 }
 
 export function AskAgentProvider({
 	runId,
+	fileNavigation,
 	providerId = AGENT_PROVIDER.CODEX,
 	children,
 }: AskAgentProviderProps) {
@@ -149,6 +157,17 @@ export function AskAgentProvider({
 		shouldFocusComposerRef.current = false;
 		setIsOpen(false);
 	}, []);
+	const handleSelectFile = useCallback(
+		(filePath: string) => {
+			close();
+			fileNavigation.onSelectFile(filePath);
+		},
+		[close, fileNavigation],
+	);
+	const conversationFileNavigation = useMemo<AskAgentFileNavigation>(
+		() => ({ filePaths: fileNavigation.filePaths, onSelectFile: handleSelectFile }),
+		[fileNavigation.filePaths, handleSelectFile],
+	);
 
 	const openWithSelection = useCallback(
 		(selection: AgentSelection) => {
@@ -349,6 +368,7 @@ export function AskAgentProvider({
 	);
 	const conversationValue = useMemo<AskAgentConversationContextValue>(
 		() => ({
+			fileNavigation: conversationFileNavigation,
 			messages,
 			pendingSelection,
 			pendingPermissions,
@@ -361,6 +381,7 @@ export function AskAgentProvider({
 		}),
 		[
 			clearSelection,
+			conversationFileNavigation,
 			isStreaming,
 			messages,
 			pendingPermissions,

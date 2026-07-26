@@ -1,7 +1,9 @@
 import type { ServerResponse } from "node:http";
 import { finished } from "node:stream/promises";
 import type { ReviewFeedbackExport } from "@stagereview/types/review-feedback";
+import { inArray } from "drizzle-orm";
 import type { StageDb } from "../db/client.js";
+import { commentThread } from "../db/schema/index.js";
 import {
 	buildReviewFeedbackExport,
 	type ReviewFeedbackSession,
@@ -37,7 +39,13 @@ export function reviewFeedbackRoutes(
 
 				const feedback = buildReviewFeedbackExport(session.scope, threads);
 
-				await completeReviewSession(res, session, feedback);
+				await completeReviewSession(
+					res,
+					session,
+					feedback,
+					db,
+					threads.map((thread) => thread.id),
+				);
 			},
 		},
 	];
@@ -47,13 +55,23 @@ async function completeReviewSession(
 	res: ServerResponse,
 	session: ReviewFeedbackSession,
 	result: ReviewFeedbackExport,
+	db: StageDb,
+	threadIds: string[],
 ): Promise<void> {
 	try {
-		await session.complete(result, async () => {
-			const responseFinished = finished(res, { cleanup: true });
-			res.writeHead(204);
-			res.end();
-			await responseFinished;
+		await session.complete(result, {
+			persist: () => {
+				db.update(commentThread)
+					.set({ resolvedAt: new Date() })
+					.where(inArray(commentThread.id, threadIds))
+					.run();
+			},
+			acknowledge: async () => {
+				const responseFinished = finished(res, { cleanup: true });
+				res.writeHead(204);
+				res.end();
+				await responseFinished;
+			},
 		});
 	} catch (error) {
 		if (error instanceof ReviewSessionConflictError) {

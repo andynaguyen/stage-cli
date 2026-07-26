@@ -1,4 +1,4 @@
-import { MessageSquareCode } from "lucide-react";
+import { Bot } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAskAgentPanel } from "@/lib/agent-chat-context";
@@ -12,12 +12,12 @@ export function AskAgentButton() {
 				<Button
 					variant={isOpen ? "secondary" : "outline"}
 					size="sm"
-					className="h-7 px-2"
+					className="h-8 px-2"
 					aria-label="Ask Agent"
 					aria-pressed={isOpen}
 					onClick={open}
 				>
-					<MessageSquareCode className="size-3.5" />
+					<Bot className="size-3.5" />
 					<span className="ml-1 hidden text-xs @7xl:inline">Ask Agent</span>
 				</Button>
 			</TooltipTrigger>

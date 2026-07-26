@@ -39,6 +39,7 @@ beforeEach(() => {
 		selectServiceTier: vi.fn(),
 	});
 	vi.mocked(useAskAgentConversation).mockReturnValue({
+		fileNavigation: { filePaths: [], onSelectFile: vi.fn() },
 		messages: [],
 		pendingSelection: null,
 		pendingPermissions: [],

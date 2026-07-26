@@ -17,6 +17,7 @@ import {
 	type AgentChatActivity,
 	type AgentChatMessage,
 } from "@/lib/agent-chat-message";
+import { resolveChangedFileLink } from "@/lib/agent-file-navigation";
 
 export function AgentSelectionLabel({ selection }: { selection: AgentSelection }) {
 	const side = selection.side === "additions" ? "new" : "old";
@@ -57,7 +58,32 @@ function ActivityRow({ activity }: { activity: AgentChatActivity }) {
 	);
 }
 
-function AssistantMessage({ message }: { message: AgentChatMessage }) {
+interface AgentAnswerProps {
+	content: string;
+	filePaths: readonly string[];
+	onSelectFile: (filePath: string) => void;
+}
+
+export function AgentAnswer({ content, filePaths, onSelectFile }: AgentAnswerProps) {
+	const handleLinkClick = (href: string) => {
+		const filePath = resolveChangedFileLink(href, filePaths);
+		if (filePath === null) return false;
+		onSelectFile(filePath);
+		return true;
+	};
+
+	return (
+		<Markdown content={content} className="text-foreground/90" onLinkClick={handleLinkClick} />
+	);
+}
+
+interface AssistantMessageProps {
+	message: AgentChatMessage;
+	filePaths: readonly string[];
+	onSelectFile: (filePath: string) => void;
+}
+
+function AssistantMessage({ message, filePaths, onSelectFile }: AssistantMessageProps) {
 	const isThinking =
 		message.status === AGENT_MESSAGE_STATUS.STREAMING && message.content.length === 0;
 	return (
@@ -67,7 +93,11 @@ function AssistantMessage({ message }: { message: AgentChatMessage }) {
 			</div>
 			<div className="min-w-0 flex-1">
 				{message.content.length > 0 && (
-					<Markdown content={message.content} className="text-foreground/90" />
+					<AgentAnswer
+						content={message.content}
+						filePaths={filePaths}
+						onSelectFile={onSelectFile}
+					/>
 				)}
 				{isThinking && (
 					<div className="flex items-center gap-2 py-1 text-muted-foreground text-sm">
@@ -119,7 +149,7 @@ function UserMessage({ message }: { message: AgentChatMessage }) {
 }
 
 export function AgentConversation() {
-	const { messages } = useAskAgentConversation();
+	const { messages, fileNavigation } = useAskAgentConversation();
 	const endRef = useRef<HTMLDivElement>(null);
 	const lastMessage = messages.at(-1);
 
@@ -133,7 +163,12 @@ export function AgentConversation() {
 				message.role === "user" ? (
 					<UserMessage key={message.id} message={message} />
 				) : (
-					<AssistantMessage key={message.id} message={message} />
+					<AssistantMessage
+						key={message.id}
+						message={message}
+						filePaths={fileNavigation.filePaths}
+						onSelectFile={fileNavigation.onSelectFile}
+					/>
 				),
 			)}
 			<div ref={endRef} />

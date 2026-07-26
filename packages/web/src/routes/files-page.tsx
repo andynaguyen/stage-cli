@@ -16,10 +16,19 @@ const NO_COMMENT_COUNTS: Map<string, number> = new Map();
 
 interface FilesPageProps {
 	runId: string;
-	focusedThreadId?: string;
+	navigationTarget?: FileNavigationTarget;
 }
 
-export function FilesPage({ runId, focusedThreadId }: FilesPageProps) {
+export const FILE_NAVIGATION_TARGET = {
+	FILE: "file",
+	THREAD: "thread",
+} as const;
+
+export type FileNavigationTarget =
+	| { type: typeof FILE_NAVIGATION_TARGET.FILE; filePath: string }
+	| { type: typeof FILE_NAVIGATION_TARGET.THREAD; threadId: string };
+
+export function FilesPage({ runId, navigationTarget }: FilesPageProps) {
 	const { data: diffData, isLoading, error } = useDiffPatch(runId);
 	const { threads } = useCommentThreadsContext();
 
@@ -66,20 +75,31 @@ export function FilesPage({ runId, focusedThreadId }: FilesPageProps) {
 		onToggleViewed: handleToggleViewed,
 		collapse: collapseState,
 	});
-	const focusedThread = threads.find((thread) => thread.id === focusedThreadId);
-	const focusedThreadPath = focusedThread?.filePath;
+	const targetType = navigationTarget?.type;
+	const targetId =
+		navigationTarget?.type === FILE_NAVIGATION_TARGET.FILE
+			? navigationTarget.filePath
+			: navigationTarget?.threadId;
 
 	useEffect(() => {
-		if (
-			diffData === undefined ||
-			focusedThreadId === undefined ||
-			focusedThreadPath === undefined
-		) {
-			return;
+		if (diffData === undefined || targetType === undefined || targetId === undefined) return;
+		if (targetType === FILE_NAVIGATION_TARGET.FILE) {
+			handleSelectFile(targetId);
+			return cancelScrollToLine;
 		}
-		scrollToCommentThread({ id: focusedThreadId, filePath: focusedThreadPath });
+		const thread = threads.find((candidate) => candidate.id === targetId);
+		if (thread === undefined) return;
+		scrollToCommentThread({ id: thread.id, filePath: thread.filePath });
 		return cancelScrollToLine;
-	}, [diffData, focusedThreadId, focusedThreadPath, scrollToCommentThread, cancelScrollToLine]);
+	}, [
+		diffData,
+		targetType,
+		targetId,
+		threads,
+		handleSelectFile,
+		scrollToCommentThread,
+		cancelScrollToLine,
+	]);
 
 	const viewed = useMemo<ViewedConfig>(
 		() => ({

@@ -7,6 +7,7 @@ import {
 	type SelectedLineRange,
 } from "@pierre/diffs";
 import { FileDiff, PatchDiff } from "@pierre/diffs/react";
+import { COMMENT_ANCHOR } from "@stagereview/types/comments";
 import { Plus } from "lucide-react";
 import {
 	type CSSProperties,
@@ -43,7 +44,7 @@ import {
 	SIDE_TO_DIFF,
 } from "@/lib/diff-types";
 import { resolveSyntaxTheme } from "@/lib/syntax-themes";
-import type { CommentThread } from "@/lib/use-comment-threads";
+import type { LineCommentThread } from "@/lib/use-comment-threads";
 import { useDiffSettings } from "@/lib/use-diff-settings";
 import { toSingleSideSelection, useTextSelection } from "@/lib/use-text-selection";
 import { LineHighlightOverlay } from "./hunk-highlight-overlay";
@@ -114,6 +115,7 @@ export function getVisibleLineRange(
 
 type PierreDiffViewerProps = {
 	filePath?: string;
+	lineThreads: readonly LineCommentThread[];
 	selectedLines?: SelectedLineRange | null;
 	expandUnchanged?: boolean;
 	/** All key change line refs grouped by file path. */
@@ -157,6 +159,7 @@ export function PierreDiffViewer({
 	patch,
 	fileDiff,
 	filePath,
+	lineThreads,
 	selectedLines: selectedLinesProp,
 	expandUnchanged = false,
 	allLineRefsByFile,
@@ -196,13 +199,8 @@ export function PierreDiffViewer({
 	}, [allLineRefsByFile, filePath]);
 
 	// ---- Line-anchored comments ----
-	const comments = useCommentThreadsContext();
+	const { createThread } = useCommentThreadsContext();
 	const askAgent = useOptionalAskAgentSelection();
-	const { createThread } = comments;
-	const fileThreads = useMemo(
-		() => (filePath ? (comments.threadsByFile.get(filePath) ?? []) : []),
-		[comments.threadsByFile, filePath],
-	);
 	// In-progress comment composers, one per anchor row — several can be open at once.
 	const [drafts, setDrafts] = useState<DraftState[]>([]);
 	const [activeDraft, setActiveDraft] = useState<CommentDraft | null>(null);
@@ -219,8 +217,8 @@ export function PierreDiffViewer({
 	const isHoveringRef = useRef(false);
 
 	const lineAnnotations = useMemo(
-		() => buildCommentAnnotations(fileThreads, drafts),
-		[fileThreads, drafts],
+		() => buildCommentAnnotations(lineThreads, drafts),
+		[lineThreads, drafts],
 	);
 
 	// Open a composer at an anchor. A row holds at most one composer, so re-opening the
@@ -248,6 +246,7 @@ export function PierreDiffViewer({
 			setError(null);
 			try {
 				await createThread({
+					anchor: COMMENT_ANCHOR.LINE,
 					filePath,
 					side: draft.side,
 					startLine: draft.startLine,
@@ -263,7 +262,7 @@ export function PierreDiffViewer({
 		[filePath, createThread, closeDraft],
 	);
 
-	const handleThreadMouseEnter = useCallback((thread: CommentThread) => {
+	const handleThreadMouseEnter = useCallback((thread: LineCommentThread) => {
 		isHoveringRef.current = true;
 		setHoverLines({
 			start: thread.startLine,
@@ -279,7 +278,7 @@ export function PierreDiffViewer({
 	}, []);
 
 	const renderAnnotation = useCallback(
-		(annotation: DiffLineAnnotation<CommentThread[]>): ReactNode => {
+		(annotation: DiffLineAnnotation<LineCommentThread[]>): ReactNode => {
 			const threads = annotation.metadata ?? [];
 			const draft = findDraftAt(drafts, annotation.side, annotation.lineNumber);
 			if (threads.length === 0 && !draft) return null;
@@ -480,7 +479,7 @@ export function PierreDiffViewer({
 				className="@container/diff relative isolate overflow-hidden rounded-b-lg border-x border-b border-border"
 				ref={diffContainerRef}
 			>
-				<FileDiff<CommentThread[]> fileDiff={fileDiff} {...sharedProps} />
+				<FileDiff<LineCommentThread[]> fileDiff={fileDiff} {...sharedProps} />
 				{overlay}
 				{textSelectionPopup}
 			</div>
@@ -492,7 +491,7 @@ export function PierreDiffViewer({
 			className="@container/diff relative isolate overflow-hidden rounded-b-lg border-x border-b border-border"
 			ref={diffContainerRef}
 		>
-			<PatchDiff<CommentThread[]> patch={patch} {...sharedProps} />
+			<PatchDiff<LineCommentThread[]> patch={patch} {...sharedProps} />
 			{overlay}
 			{textSelectionPopup}
 		</div>

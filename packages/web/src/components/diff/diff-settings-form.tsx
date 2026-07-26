@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { SYNTAX_THEME_OPTIONS } from "@/lib/syntax-themes";
+import { USER_THEME, type UserTheme, useTheme } from "@/lib/theme";
 import {
 	DIFF_INDICATORS,
 	type DiffIndicators,
@@ -29,6 +30,12 @@ const INDICATOR_OPTIONS: { value: DiffIndicators; label: string }[] = [
 	{ value: DIFF_INDICATORS.CLASSIC, label: "Classic (+/-)" },
 	{ value: DIFF_INDICATORS.BARS, label: "Bars" },
 	{ value: DIFF_INDICATORS.NONE, label: "None" },
+];
+
+const APPEARANCE_OPTIONS: { value: UserTheme; label: string }[] = [
+	{ value: USER_THEME.LIGHT, label: "Light" },
+	{ value: USER_THEME.DARK, label: "Dark" },
+	{ value: USER_THEME.SYSTEM, label: "System" },
 ];
 
 const LINE_DIFF_OPTIONS: { value: LineDiffType; label: string; description: string }[] = [
@@ -51,6 +58,7 @@ const LINE_DIFF_OPTIONS: { value: LineDiffType; label: string; description: stri
 ];
 
 export function DiffSettingsForm({ compact }: DiffSettingsFormProps) {
+	const { userTheme, setTheme } = useTheme();
 	const {
 		viewMode,
 		setViewMode,
@@ -70,7 +78,10 @@ export function DiffSettingsForm({ compact }: DiffSettingsFormProps) {
 
 	return (
 		<div className={cn("space-y-4", compact && "space-y-3")}>
-			{/* Syntax theme */}
+			<SettingRow label="Appearance" compact={compact}>
+				<SettingSelect value={userTheme} onValueChange={setTheme} options={APPEARANCE_OPTIONS} />
+			</SettingRow>
+
 			<SettingRow label="Syntax theme" compact={compact}>
 				<SettingSelect
 					value={syntaxTheme}
@@ -79,7 +90,6 @@ export function DiffSettingsForm({ compact }: DiffSettingsFormProps) {
 				/>
 			</SettingRow>
 
-			{/* View mode */}
 			<SettingRow label="Layout" compact={compact}>
 				<div className="w-[160px]">
 					<SegmentedToggle<ViewMode>
@@ -93,7 +103,6 @@ export function DiffSettingsForm({ compact }: DiffSettingsFormProps) {
 				</div>
 			</SettingRow>
 
-			{/* Diff indicators */}
 			<SettingRow label="Indicators" compact={compact}>
 				<SettingSelect
 					value={diffIndicators}
@@ -102,7 +111,6 @@ export function DiffSettingsForm({ compact }: DiffSettingsFormProps) {
 				/>
 			</SettingRow>
 
-			{/* Inline diff type */}
 			<SettingRow label="Inline diffs" compact={compact}>
 				<SettingSelect
 					value={lineDiffType}
@@ -111,17 +119,14 @@ export function DiffSettingsForm({ compact }: DiffSettingsFormProps) {
 				/>
 			</SettingRow>
 
-			{/* Backgrounds */}
 			<SettingRow label="Backgrounds" compact={compact}>
 				<Switch checked={backgrounds} onCheckedChange={setBackgrounds} />
 			</SettingRow>
 
-			{/* Line wrapping */}
 			<SettingRow label="Wrapping" compact={compact}>
 				<Switch checked={wrap} onCheckedChange={setWrap} />
 			</SettingRow>
 
-			{/* Line numbers */}
 			<SettingRow label="Line numbers" compact={compact}>
 				<Switch checked={lineNumbers} onCheckedChange={setLineNumbers} />
 			</SettingRow>

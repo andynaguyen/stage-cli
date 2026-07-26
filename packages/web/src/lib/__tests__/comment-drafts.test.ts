@@ -1,3 +1,4 @@
+import { COMMENT_ANCHOR } from "@stagereview/types/comments";
 import { describe, expect, it } from "vitest";
 import {
 	buildCommentAnnotations,
@@ -12,14 +13,15 @@ import {
 	upsertDraft,
 	writeDraftBody,
 } from "../comment-drafts";
-import type { CommentThread } from "../use-comment-threads";
+import type { LineCommentThread } from "../use-comment-threads";
 
 function makeThread(
-	over: Partial<CommentThread> & Pick<CommentThread, "side" | "endLine">,
-): CommentThread {
+	over: Partial<LineCommentThread> & Pick<LineCommentThread, "side" | "endLine">,
+): LineCommentThread {
 	return {
 		id: `t-${over.side}-${over.endLine}`,
 		filePath: "a.ts",
+		anchor: COMMENT_ANCHOR.LINE,
 		startLine: over.endLine,
 		resolvedAt: null,
 		createdAt: "2026-06-08T00:00:00.000Z",

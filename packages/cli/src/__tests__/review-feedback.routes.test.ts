@@ -2,7 +2,11 @@ import fs from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
-import { type CommentThread, CommentThreadSchema } from "@stagereview/types/comments";
+import {
+	COMMENT_ANCHOR,
+	type CommentThread,
+	CommentThreadSchema,
+} from "@stagereview/types/comments";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { closeDb, getDb } from "../db/client.js";
 import { formatReviewGitRef, ReviewFeedbackSession } from "../review-feedback.js";
@@ -94,6 +98,7 @@ function send(
 
 async function createThread(port: number, runId: string, body: string): Promise<CommentThread> {
 	const response = await send(port, "POST", `/api/runs/${runId}/comment-threads`, {
+		anchor: COMMENT_ANCHOR.LINE,
 		filePath: "src/example.ts",
 		side: "additions",
 		startLine: 4,
@@ -122,7 +127,7 @@ describe("review feedback API", () => {
 		expect((await send(port, "POST", "/api/feedback")).status).toBe(409);
 	});
 
-	it("submits unresolved comments once", async () => {
+	it("submits and resolves unresolved comments once", async () => {
 		const runId = seedRun();
 		const { port, session } = await start(runId);
 		const open = await createThread(port, runId, "Submit me");
@@ -143,6 +148,10 @@ describe("review feedback API", () => {
 		});
 		expect(result.feedback).toContain("Submit me\n\nReply");
 		expect(result.feedback).not.toContain("Hide me");
+		const persisted = CommentThreadSchema.array().parse(
+			(await send(port, "GET", `/api/runs/${runId}/comment-threads`)).body,
+		);
+		expect(persisted.find((thread) => thread.id === open.id)?.resolvedAt).not.toBeNull();
 
 		const repeated = await send(port, "POST", "/api/feedback");
 		expect(repeated.status).toBe(409);

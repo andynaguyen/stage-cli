@@ -1,9 +1,11 @@
 // @vitest-environment happy-dom
 
-import type { CommentThread } from "@stagereview/types/comments";
-import { cleanup, render, waitFor } from "@testing-library/react";
+import { COMMENT_ANCHOR, type CommentThread } from "@stagereview/types/comments";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createRef, type RefObject, useMemo, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { makeWrapper } from "@/lib/__tests__/fixtures";
+import { CommentThreadsProvider } from "@/lib/comment-threads-context";
 import { FILE_STATUS } from "@/lib/diff-types";
 import { parsePatchToFileDiffs } from "@/lib/parse-diff";
 import { FileDiffList, type FileDiffListHandle } from "../file-diff-list";
@@ -14,6 +16,7 @@ vi.mock("@/components/chapter/pierre-diff-viewer", () => ({
 
 afterEach(() => {
 	cleanup();
+	vi.unstubAllGlobals();
 	vi.restoreAllMocks();
 });
 
@@ -29,6 +32,7 @@ index 1111111..2222222 100644
 const THREAD: CommentThread = {
 	id: "thread-1",
 	filePath: "src/example.ts",
+	anchor: COMMENT_ANCHOR.LINE,
 	side: "additions",
 	startLine: 1,
 	endLine: 1,
@@ -100,7 +104,22 @@ describe("FileDiffList comment navigation", () => {
 			value: scrollIntoView,
 		});
 		const listRef = createRef<FileDiffListHandle>();
-		render(<CollapsedFileList listRef={listRef} />);
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(
+				async () =>
+					new Response(JSON.stringify([THREAD]), {
+						headers: { "Content-Type": "application/json" },
+					}),
+			),
+		);
+		const { Wrapper } = makeWrapper();
+		render(
+			<CommentThreadsProvider runId="run-1">
+				<CollapsedFileList listRef={listRef} />
+			</CommentThreadsProvider>,
+			{ wrapper: Wrapper },
+		);
 
 		listRef.current?.scrollToCommentThread(THREAD);
 
@@ -108,5 +127,46 @@ describe("FileDiffList comment navigation", () => {
 			expect(document.activeElement?.id).toBe("comment-thread-thread-1");
 		});
 		expect(scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "center" });
+	});
+
+	it("opens a file composer and submits a file-level anchor", async () => {
+		const requestBodies: unknown[] = [];
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+				if (init?.method === "POST") {
+					requestBodies.push(JSON.parse(String(init.body)));
+					return new Response("{}", {
+						status: 201,
+						headers: { "Content-Type": "application/json" },
+					});
+				}
+				return new Response("[]", {
+					headers: { "Content-Type": "application/json" },
+				});
+			}),
+		);
+		const { Wrapper } = makeWrapper();
+		render(
+			<CommentThreadsProvider runId="run-1">
+				<CollapsedFileList listRef={createRef<FileDiffListHandle>()} />
+			</CommentThreadsProvider>,
+			{ wrapper: Wrapper },
+		);
+
+		fireEvent.click(screen.getByRole("button", { name: "Comment on this file" }));
+		const textarea = await screen.findByPlaceholderText("Leave a comment on this file…");
+		fireEvent.change(textarea, { target: { value: "Consider splitting this file." } });
+		fireEvent.click(screen.getByRole("button", { name: "Comment" }));
+
+		await waitFor(() => {
+			expect(requestBodies).toEqual([
+				{
+					anchor: COMMENT_ANCHOR.FILE,
+					filePath: THREAD.filePath,
+					body: "Consider splitting this file.",
+				},
+			]);
+		});
 	});
 });

@@ -1,4 +1,5 @@
-import { ArrowRight, LoaderCircle, Send, Sparkles } from "lucide-react";
+import { COMMENT_ANCHOR, type CommentThread } from "@stagereview/types/comments";
+import { ArrowRight, LoaderCircle, Send, WandSparkles } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverHeader, PopoverTrigger } from "@/components/ui/popover";
@@ -9,6 +10,10 @@ import { useReviewFeedback } from "@/lib/use-review-feedback";
 
 interface AddressCommentsButtonProps {
 	onSelectThread: (threadId: string) => void;
+}
+
+function formatCommentAnchor(thread: CommentThread): string {
+	return thread.anchor === COMMENT_ANCHOR.FILE ? "File comment" : formatLineRange(thread);
 }
 
 export function AddressCommentsButton({ onSelectThread }: AddressCommentsButtonProps) {
@@ -47,11 +52,11 @@ export function AddressCommentsButton({ onSelectThread }: AddressCommentsButtonP
 	return (
 		<Popover open={isOpen} onOpenChange={handleOpenChange}>
 			<PopoverTrigger asChild>
-				<Button type="button" size="sm" className="h-7 px-2" disabled={isDisabled}>
+				<Button type="button" size="sm" className="h-8 px-2" disabled={isDisabled}>
 					{isLoading || submission.isPending ? (
 						<LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
 					) : (
-						<Sparkles className="size-3.5" aria-hidden="true" />
+						<WandSparkles className="size-3.5" aria-hidden="true" />
 					)}
 					<span className="text-xs">{isLoading ? "Loading comments…" : "Address comments"}</span>
 				</Button>
@@ -76,7 +81,7 @@ export function AddressCommentsButton({ onSelectThread }: AddressCommentsButtonP
 								type="button"
 								className="group w-full cursor-pointer px-4 py-3 text-left outline-none transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
 								onClick={() => handleSelectThread(thread.id)}
-								aria-label={`Go to ${thread.filePath}, ${formatLineRange(thread)}`}
+								aria-label={`Go to ${thread.filePath}, ${formatCommentAnchor(thread)}`}
 							>
 								<span className="flex items-center justify-between gap-3">
 									<span className="truncate text-muted-foreground text-xs">{thread.filePath}</span>
@@ -92,7 +97,7 @@ export function AddressCommentsButton({ onSelectThread }: AddressCommentsButtonP
 											className="block border-border border-l-2 pl-3 text-sm leading-relaxed"
 										>
 											<span className="mb-1 block font-medium text-muted-foreground text-xs">
-												{formatLineRange(thread)}
+												{formatCommentAnchor(thread)}
 											</span>
 											<span className="line-clamp-3 whitespace-pre-wrap break-words">
 												{comment.body}

@@ -1,17 +1,15 @@
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { BookOpen, FileText, FoldVertical, Settings2, UnfoldVertical } from "lucide-react";
+import { BookOpen, FileText, FoldVertical, UnfoldVertical } from "lucide-react";
 import { type CSSProperties, useCallback, useMemo, useRef, useState } from "react";
 import { AskAgentShell } from "@/components/agent/agent-panel";
 import { AskAgentButton } from "@/components/agent/ask-agent-button";
 import { AddressCommentsButton } from "@/components/comments/address-comments-button";
-import { DiffSettingsForm } from "@/components/diff/diff-settings-form";
 import { PullRequestHeader } from "@/components/pull-request/pull-request-header";
 import { PullRequestHeaderSkeleton } from "@/components/pull-request/pull-request-header-skeleton";
 import { SectionLabel } from "@/components/pull-request/section-label";
 import { Button } from "@/components/ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { AskAgentProvider } from "@/lib/agent-chat-context";
+import { type AskAgentFileNavigation, AskAgentProvider } from "@/lib/agent-chat-context";
 import { ChapterProvider } from "@/lib/chapter-context";
 import { CollapseActionsProvider, useCollapseActionsFromNav } from "@/lib/collapse-actions-context";
 import { useFileDiffEntries } from "@/lib/parse-diff";
@@ -86,7 +84,7 @@ function CollapseExpandAllButton() {
 				<Button
 					variant="outline"
 					size="sm"
-					className="h-7 cursor-pointer px-2"
+					className="h-8 cursor-pointer px-2"
 					aria-label={label}
 					onClick={handleClick}
 				>
@@ -163,6 +161,7 @@ export function PullRequestLayout({ runId }: { runId: string }) {
 	// user clicks into the tab; react-query dedupes the same fetch from FilesPage.
 	const { data: diffData } = useDiffPatch(runId);
 	const fileEntries = useFileDiffEntries(diffData?.patch, diffData?.fileContents);
+	const filePaths = useMemo(() => fileEntries.map((entry) => entry.file.path), [fileEntries]);
 	const totalFileCount = fileEntries.length;
 	const viewedFileCount = useMemo(() => {
 		if (totalFileCount === 0) return 0;
@@ -196,6 +195,20 @@ export function PullRequestLayout({ runId }: { runId: string }) {
 			});
 		},
 		[navigate, runId],
+	);
+	const handleSelectAgentFile = useCallback(
+		(filePath: string) => {
+			void navigate({
+				to: "/runs/$runId/files",
+				params: { runId },
+				search: { file: filePath },
+			});
+		},
+		[navigate, runId],
+	);
+	const agentFileNavigation = useMemo<AskAgentFileNavigation>(
+		() => ({ filePaths, onSelectFile: handleSelectAgentFile }),
+		[filePaths, handleSelectAgentFile],
 	);
 
 	// Page-scroll tabs read `--content-top` (topbar + sticky nav) to pin their own
@@ -241,7 +254,7 @@ export function PullRequestLayout({ runId }: { runId: string }) {
 	if (error) return <ErrorState error={error} />;
 
 	return (
-		<AskAgentProvider runId={runId}>
+		<AskAgentProvider runId={runId} fileNavigation={agentFileNavigation}>
 			<CollapseActionsProvider>
 				<AskAgentShell>
 					<div
@@ -299,27 +312,6 @@ export function PullRequestLayout({ runId }: { runId: string }) {
 								<AddressCommentsButton onSelectThread={handleSelectCommentThread} />
 								<AskAgentButton />
 								<CollapseExpandAllButton />
-								<Popover>
-									<Tooltip>
-										<TooltipTrigger asChild>
-											<PopoverTrigger asChild>
-												<Button
-													variant="outline"
-													size="sm"
-													className="h-7 cursor-pointer px-2"
-													aria-label="Display settings"
-												>
-													<Settings2 className="size-3.5" />
-													<span className="ml-1 hidden text-xs @7xl:inline">Display</span>
-												</Button>
-											</PopoverTrigger>
-										</TooltipTrigger>
-										<TooltipContent>Display settings</TooltipContent>
-									</Tooltip>
-									<PopoverContent align="end" className="w-80">
-										<DiffSettingsForm compact />
-									</PopoverContent>
-								</Popover>
 								<div className="hidden items-center gap-3 @5xl:flex">
 									<span className="font-medium text-green-600 dark:text-green-500">
 										+{totalAdditions.toLocaleString()}
