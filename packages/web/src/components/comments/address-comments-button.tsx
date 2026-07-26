@@ -1,5 +1,5 @@
 import { COMMENT_ANCHOR, type CommentThread } from "@stagereview/types/comments";
-import { ArrowRight, LoaderCircle, Send, Sparkles } from "lucide-react";
+import { ArrowRight, LoaderCircle, Send, WandSparkles } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverHeader, PopoverTrigger } from "@/components/ui/popover";
@@ -52,11 +52,11 @@ export function AddressCommentsButton({ onSelectThread }: AddressCommentsButtonP
 	return (
 		<Popover open={isOpen} onOpenChange={handleOpenChange}>
 			<PopoverTrigger asChild>
-				<Button type="button" size="sm" className="h-7 px-2" disabled={isDisabled}>
+				<Button type="button" size="sm" className="h-8 px-2" disabled={isDisabled}>
 					{isLoading || submission.isPending ? (
 						<LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
 					) : (
-						<Sparkles className="size-3.5" aria-hidden="true" />
+						<WandSparkles className="size-3.5" aria-hidden="true" />
 					)}
 					<span className="text-xs">{isLoading ? "Loading comments…" : "Address comments"}</span>
 				</Button>

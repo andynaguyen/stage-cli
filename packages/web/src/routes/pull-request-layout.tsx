@@ -84,7 +84,7 @@ function CollapseExpandAllButton() {
 				<Button
 					variant="outline"
 					size="sm"
-					className="h-7 cursor-pointer px-2"
+					className="h-8 cursor-pointer px-2"
 					aria-label={label}
 					onClick={handleClick}
 				>
