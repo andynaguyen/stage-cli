@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { parseRepoName, resolveScope } from "../git.js";
+import { getCommitSubjects, parseRepoName, resolveScope } from "../git.js";
 import { SCOPE_KIND, WORKING_TREE_REF } from "../schema.js";
 
 let tmpDir: string;
@@ -95,6 +95,14 @@ describe("parseRepoName", () => {
 	it("falls back to the worktree basename for an empty/garbage URL", () => {
 		expect(parseRepoName("", FALLBACK_ROOT)).toBe("monterrey-v3");
 		expect(parseRepoName(".git", FALLBACK_ROOT)).toBe("monterrey-v3");
+	});
+});
+
+describe("getCommitSubjects", () => {
+	it("returns commit subjects without their hashes", async () => {
+		const { commonSha, featureSha } = await initDivergedRepo();
+
+		expect(getCommitSubjects(tmpDir, commonSha, featureSha)).toEqual(["feature change"]);
 	});
 });
 

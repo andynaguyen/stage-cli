@@ -203,6 +203,18 @@ export function getCommitMessages(mergeBase: string, head: string): string {
 	}).trim();
 }
 
+export function getCommitSubjects(repoRoot: string, mergeBase: string, head: string): string[] {
+	const output = execFileSync(
+		"git",
+		["-C", repoRoot, "log", "--format=%s", `${mergeBase}..${head}`],
+		{
+			encoding: "utf8",
+			stdio: ["ignore", "pipe", "ignore"],
+		},
+	).trim();
+	return output ? output.split("\n") : [];
+}
+
 export function hasUncommittedChanges(): boolean {
 	const out = execFileSync("git", ["status", "--porcelain"], {
 		encoding: "utf8",

@@ -112,6 +112,11 @@ The two number columns are the **old line number** (left) and **new line number*
 
 Using the hunks from `hunks.txt`, produce a `chapters` array. Each chapter groups related hunks into a coherent story beat, narrates them for a reviewer unfamiliar with this part of the codebase, and flags judgment calls that need human input.
 
+Also produce a `reviewTitle`: a concise phrase of at most 80 characters with no `Stage -`
+prefix, quotes, or trailing punctuation. When there are multiple commits, synthesize the overall
+intent from the commit messages. When there are no commits, synthesize it from the diff. Stage uses
+the exact commit subject instead when there is one commit and the exact PR title for PR reviews.
+
 ### 3a — Clustering rules
 
 Group hunks by **causal relationship** — changes that set up or enable later changes belong together.
@@ -296,6 +301,7 @@ Compute a unique temp path and write the JSON via a bash heredoc:
 AGENT_OUTPUT=$(mktemp "${TMPDIR:-/tmp}/stage-agent-output.XXXXXX")
 cat > "$AGENT_OUTPUT" << 'AGENT_EOF'
 {
+  "reviewTitle": "Make browser tabs describe the reviewed change",
   "chapters": [ ... ],
   "prologue": { ... }
 }
@@ -308,6 +314,7 @@ Field rules:
 
 | Field | Constraint |
 |-------|------------|
+| `reviewTitle` | AI-generated review summary, 1–80 characters, without the `Stage -` prefix |
 | `chapters[].id` | Non-empty, unique within the run |
 | `chapters[].order` | Positive integer (1-indexed) |
 | `chapters[].hunkRefs[].oldStart` | Non-negative integer — the pre-image start line from the `oldStart` in the formatted hunk header (`0` for new files) |
