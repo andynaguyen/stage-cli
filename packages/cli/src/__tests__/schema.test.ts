@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ChaptersFileSchema } from "../schema.js";
+import { AgentOutputSchema, ChaptersFileSchema } from "../schema.js";
 
 const SHA = {
 	base: "1111111111111111111111111111111111111111",
@@ -65,6 +65,7 @@ function makeWorkingTreeScope(over: Record<string, unknown> = {}) {
 function makeFixture(over: Record<string, unknown> = {}) {
 	return {
 		scope: makeCommittedScope(),
+		reviewTitle: "Wire organization context through requests",
 		chapters: [makeChapter()],
 		generatedAt: "2026-04-26T12:00:00.000Z",
 		...over,
@@ -86,7 +87,17 @@ describe("ChaptersFileSchema", () => {
 
 		expect(result.scope.kind).toBe("committed");
 		expect(result.scope.mergeBaseSha).toBe(SHA.mergeBase);
+		expect(result.reviewTitle).toBe("Wire organization context through requests");
 		expect(result.chapters[0]?.keyChanges[0]?.lineRefs[0]?.side).toBe("additions");
+	});
+
+	it("accepts and trims the agent-generated review title", () => {
+		const result = AgentOutputSchema.parse({
+			reviewTitle: "  Summarize the complete review  ",
+			chapters: [makeChapter()],
+		});
+
+		expect(result.reviewTitle).toBe("Summarize the complete review");
 	});
 
 	it.each([

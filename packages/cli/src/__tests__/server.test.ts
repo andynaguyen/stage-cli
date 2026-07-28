@@ -32,8 +32,12 @@ afterEach(async () => {
 	}
 });
 
-async function start(routes?: Route[]): Promise<ServerHandle> {
-	const handle = await startServer({ webDistPath: webDist, routes });
+async function start(routes?: Route[], pageTitle?: string): Promise<ServerHandle> {
+	const handle = await startServer({
+		webDistPath: webDist,
+		routes,
+		...(pageTitle === undefined ? {} : { pageTitle }),
+	});
 	handles.push(handle);
 	return handle;
 }
@@ -80,6 +84,23 @@ describe("startServer", () => {
 		expect(res.status).toBe(200);
 		expect(res.headers["content-type"]).toMatch(/text\/html/);
 		expect(res.body).toContain("SPA-SHELL");
+	});
+
+	it("injects the configured page title into direct index requests", async () => {
+		const { port } = await start(undefined, "Stage - Ship browser titles");
+
+		const res = await rawRequest(port, "/index.html");
+
+		expect(res.body).toContain("<title>Stage - Ship browser titles</title>");
+	});
+
+	it("escapes the configured page title in SPA fallback HTML", async () => {
+		const { port } = await start(undefined, "Stage - Review <script>& cleanup");
+
+		const res = await rawRequest(port, "/runs/123");
+
+		expect(res.body).toContain("<title>Stage - Review &lt;script&gt;&amp; cleanup</title>");
+		expect(res.body).not.toContain("<title>Stage - Review <script>");
 	});
 
 	it("serves static assets with mime types from the lookup table", async () => {

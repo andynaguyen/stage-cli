@@ -9,6 +9,7 @@ import { filterFilesForLlm, loadStageIgnore } from "./filter-files.js";
 import { readRepoContext, readRepoRoot } from "./git.js";
 import { ReviewFeedbackSession } from "./review-feedback.js";
 import { runReviewSession } from "./review-lifecycle.js";
+import { ReviewTitleResolver } from "./review-title.js";
 import { agentRoutes } from "./routes/agent.js";
 import { commentRoutes } from "./routes/comments.js";
 import { diffRoutes } from "./routes/diff.js";
@@ -36,9 +37,19 @@ export async function show(jsonPath: string, options: DiffScopeOptions): Promise
 	const agentRuntime = createAgentRuntime();
 	try {
 		const { chaptersFile, prNumber } = await buildChaptersFile(jsonPath, options);
-		const { runId } = insertChaptersFile(db, chaptersFile, readRepoContext(), prNumber);
+		const repo = readRepoContext();
+		const firstChapter = chaptersFile.chapters[0];
+		const pageTitle = await new ReviewTitleResolver().resolve({
+			repo,
+			scope: chaptersFile.scope,
+			prNumber,
+			...(chaptersFile.reviewTitle !== undefined ? { reviewTitle: chaptersFile.reviewTitle } : {}),
+			fallbackTitle: firstChapter === undefined ? null : firstChapter.title,
+		});
+		const { runId } = insertChaptersFile(db, chaptersFile, repo, prNumber);
 		const feedbackSession = new ReviewFeedbackSession(chaptersFile.scope);
 		const handle = await startServer({
+			pageTitle,
 			routes: [
 				...agentRoutes(db, agentRuntime),
 				...runRoutes(db),
@@ -125,6 +136,7 @@ function assembleChaptersFile(
 
 	return {
 		scope,
+		...(agentOutput.reviewTitle !== undefined ? { reviewTitle: agentOutput.reviewTitle } : {}),
 		chapters,
 		prologue: agentOutput.prologue,
 		generatedAt: new Date().toISOString(),
