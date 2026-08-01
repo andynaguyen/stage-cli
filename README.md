@@ -27,20 +27,27 @@
 
 ## Install
 
+Install the latest CLI tarball from this fork's GitHub Releases. This requires Node.js 20 or newer
+and the [GitHub CLI](https://cli.github.com/)—run `gh auth login` first if the repository is private.
+
 ```bash
-npm install -g stagereview
+gh release download \
+  --repo andynaguyen/stage-cli \
+  --pattern "*.tgz" \
+  --output stagereview.tgz
+npm install -g ./stagereview.tgz
 ```
 
 Then add the skill to your agent:
 
 ```bash
-npx skills add ReviewStage/stage-cli
+npx skills add andynaguyen/stage-cli
 ```
 
 ## Uninstall
 
 ```bash
-npx skills remove ReviewStage/stage-cli
+npx skills remove andynaguyen/stage-cli
 npm uninstall -g stagereview
 ```
 
@@ -103,6 +110,30 @@ dist/**
 Ignored files still appear in the "Other changes" chapter so nothing is silently hidden. Comments (`#`), blank lines, and negation patterns (`!`) are supported — last matching pattern wins.
 
 <img width="1840" height="1196" alt="Stage CLI" src="https://raw.githubusercontent.com/ReviewStage/stage-cli/main/assets/screenshot.png" />
+
+## Release a fork
+
+Fork maintainers can distribute the CLI without publishing to npm. The release script builds and
+verifies the repository, creates an installable npm tarball, and attaches it to a GitHub Release.
+
+Before releasing, update the version in `packages/cli/package.json`, commit and push the change,
+and authenticate the GitHub CLI with `gh auth login`. The current branch must be clean and match
+its upstream branch.
+
+Verify the package without changing GitHub:
+
+```bash
+pnpm run release -- --dry-run
+```
+
+Create the `v<version>` tag and GitHub Release:
+
+```bash
+pnpm release
+```
+
+The installation commands above always download the latest release, so they do not need to change
+when the package version changes.
 
 ## License
 

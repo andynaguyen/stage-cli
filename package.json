@@ -27,6 +27,7 @@
     "format": "biome format --write .",
     "typecheck": "pnpm -r typecheck",
     "db:generate": "pnpm --filter stagereview db:generate",
+    "release": "node scripts/release.js",
     "prepare": "husky"
   },
   "lint-staged": {
