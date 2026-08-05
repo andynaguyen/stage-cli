@@ -25,7 +25,9 @@
   <a href="https://github.com/ReviewStage/stage-cli/blob/main/LICENSE"><img src="https://img.shields.io/npm/l/stagereview.svg" alt="license"></a>
 </p>
 
-## Install
+## Installation
+
+### Install manually
 
 Install the latest CLI tarball from this fork's GitHub Releases. This requires Node.js 20 or newer
 and the [GitHub CLI](https://cli.github.com/)—run `gh auth login` first if the repository is private.
@@ -43,6 +45,23 @@ Then add the skill to your agent:
 ```bash
 npx skills add andynaguyen/stage-cli
 ```
+
+### Install with your coding agent
+
+Open the git repository you want to review in Codex, Claude Code, Cursor, or another coding agent
+that can read files and run shell commands. Then give it this prompt:
+
+```text
+Install Stage for me. Read and follow the agent onboarding playbook at:
+https://github.com/andynaguyen/stage-cli/blob/main/ONBOARDING.md
+
+Work from the root of the git repository I currently have open. Run the machine steps
+yourself, including uninstalling an existing Stage CLI installation if one is present.
+Pause only if authentication, permissions, or an unknown installation requires my input.
+```
+
+The [agent onboarding playbook](ONBOARDING.md) tells the agent how to remove an existing CLI,
+install the latest release and `stage-chapters` skill, and verify the installation.
 
 ## Uninstall
 
