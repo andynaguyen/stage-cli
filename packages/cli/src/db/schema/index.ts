@@ -7,3 +7,4 @@ export * from "./comment-thread.js";
 export * from "./file-view.js";
 export * from "./key-change.js";
 export * from "./key-change-view.js";
+export * from "./user-settings.js";
