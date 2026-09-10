@@ -429,7 +429,14 @@ export function LineHighlightOverlay({
 
 		const attachShadowListeners = (shadowRoot: ShadowRoot) => {
 			shadowMutationObserver?.disconnect();
-			shadowMutationObserver = new MutationObserver(() => {
+			shadowMutationObserver = new MutationObserver((records) => {
+				// Pierre moves its gutter button between hovered lines without changing layout.
+				const geometryChanged = records.some((record) =>
+					[...record.addedNodes, ...record.removedNodes].some(
+						(node) => !(node instanceof Element && node.hasAttribute("data-gutter-utility-slot")),
+					),
+				);
+				if (!geometryChanged) return;
 				syncScrollSurface(shadowRoot);
 				scheduleMeasure();
 			});
