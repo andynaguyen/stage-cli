@@ -1,3 +1,4 @@
+import { USER_THEME, type UserTheme } from "@stagereview/types/user-settings";
 import {
 	createContext,
 	type ReactNode,
@@ -8,36 +9,16 @@ import {
 	useState,
 } from "react";
 
-export const USER_THEME = {
-	LIGHT: "light",
-	DARK: "dark",
-	SYSTEM: "system",
-} as const;
-export type UserTheme = (typeof USER_THEME)[keyof typeof USER_THEME];
+import { useUserSettings } from "./user-settings-context";
+
+export type { UserTheme } from "@stagereview/types/user-settings";
+export { USER_THEME } from "@stagereview/types/user-settings";
 
 export const APP_THEME = {
 	LIGHT: "light",
 	DARK: "dark",
 } as const;
 export type AppTheme = (typeof APP_THEME)[keyof typeof APP_THEME];
-
-const STORAGE_KEY = "ui-theme";
-
-const VALID_THEMES: ReadonlySet<string> = new Set<string>(Object.values(USER_THEME));
-
-function isValidUserTheme(value: string): value is UserTheme {
-	return VALID_THEMES.has(value);
-}
-
-function getStoredUserTheme(): UserTheme {
-	try {
-		const stored = localStorage.getItem(STORAGE_KEY);
-		if (stored && isValidUserTheme(stored)) return stored;
-	} catch {
-		// localStorage unavailable
-	}
-	return USER_THEME.SYSTEM;
-}
 
 function getSystemTheme(): AppTheme {
 	return window.matchMedia("(prefers-color-scheme: dark)").matches
@@ -61,7 +42,8 @@ interface ThemeContextValue {
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-	const [userTheme, setUserTheme] = useState<UserTheme>(getStoredUserTheme);
+	const { settings, updateSettings } = useUserSettings();
+	const { userTheme } = settings.display;
 	const [systemTheme, setSystemTheme] = useState<AppTheme>(getSystemTheme);
 
 	useEffect(() => {
@@ -79,15 +61,21 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
 	const appTheme: AppTheme = userTheme === USER_THEME.SYSTEM ? systemTheme : userTheme;
 
-	const setTheme = useCallback((next: UserTheme) => {
-		setUserTheme(next);
+	useEffect(() => {
+		applyThemeToDOM(userTheme);
 		try {
-			localStorage.setItem(STORAGE_KEY, next);
+			localStorage.setItem("ui-theme", userTheme);
 		} catch {
-			// localStorage unavailable
+			// Keep the pre-paint browser cache optional when storage is disabled.
 		}
-		applyThemeToDOM(next);
-	}, []);
+	}, [userTheme]);
+
+	const setTheme = useCallback(
+		(next: UserTheme) => {
+			updateSettings({ display: { userTheme: next } });
+		},
+		[updateSettings],
+	);
 
 	const contextValue = useMemo(
 		() => ({ userTheme, appTheme, setTheme }),

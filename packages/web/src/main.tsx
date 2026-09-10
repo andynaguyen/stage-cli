@@ -5,6 +5,7 @@ import { createRoot } from "react-dom/client";
 import { DiffWorkerProvider } from "./lib/diff-worker-provider";
 import { ThemeProvider } from "./lib/theme";
 import { DiffSettingsProvider } from "./lib/use-diff-settings";
+import { UserSettingsProvider } from "./lib/user-settings-context";
 import { queryClient, router } from "./router";
 import "./styles/globals.css";
 
@@ -15,14 +16,16 @@ if (!rootElement) {
 
 createRoot(rootElement).render(
 	<StrictMode>
-		<ThemeProvider>
-			<QueryClientProvider client={queryClient}>
-				<DiffSettingsProvider>
-					<DiffWorkerProvider>
-						<RouterProvider router={router} />
-					</DiffWorkerProvider>
-				</DiffSettingsProvider>
-			</QueryClientProvider>
-		</ThemeProvider>
+		<QueryClientProvider client={queryClient}>
+			<UserSettingsProvider>
+				<ThemeProvider>
+					<DiffSettingsProvider>
+						<DiffWorkerProvider>
+							<RouterProvider router={router} />
+						</DiffWorkerProvider>
+					</DiffSettingsProvider>
+				</ThemeProvider>
+			</UserSettingsProvider>
+		</QueryClientProvider>
 	</StrictMode>,
 );
