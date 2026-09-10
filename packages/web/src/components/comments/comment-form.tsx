@@ -1,5 +1,6 @@
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { formatLineRange, type LineRange } from "@/lib/format";
 import { CommentMarkdownEditor } from "./comment-markdown-editor";
 
 interface CommentFormProps {
@@ -13,6 +14,8 @@ interface CommentFormProps {
 	initialBody?: string;
 	/** Reports each edit so a parent can persist an in-progress draft across remounts. */
 	onBodyChange?: (body: string) => void;
+	/** Diff lines anchored to a new comment. Omitted for replies and edits. */
+	lineRange?: LineRange;
 	autoFocus?: boolean;
 }
 
@@ -24,6 +27,7 @@ export function CommentForm({
 	error,
 	initialBody,
 	onBodyChange,
+	lineRange,
 	autoFocus = true,
 }: CommentFormProps) {
 	const [body, setBody] = useState(initialBody ?? "");
@@ -79,6 +83,7 @@ export function CommentForm({
 				textareaRef={textareaRef}
 				disabled={isSubmitting}
 				placeholder={placeholder}
+				contextLabel={lineRange ? `${formatLineRange(lineRange)} selected` : undefined}
 				onKeyDown={handleKeyDown}
 				minRows={2}
 				maxRows={12}

@@ -62,6 +62,7 @@ export type Scope = z.infer<typeof scopeSchema>;
 
 export const ChaptersFileSchema = z.strictObject({
 	scope: scopeSchema,
+	reviewTitle: z.string().trim().min(1).max(80).optional(),
 	chapters: z.array(chapterSchema),
 	prologue: PrologueSchema.optional(),
 	generatedAt: z.iso.datetime(),
@@ -69,6 +70,7 @@ export const ChaptersFileSchema = z.strictObject({
 export type ChaptersFile = z.infer<typeof ChaptersFileSchema>;
 
 export const AgentOutputSchema = z.strictObject({
+	reviewTitle: z.string().trim().min(1).max(80).optional(),
 	chapters: z.array(chapterSchema),
 	prologue: PrologueSchema.optional(),
 });

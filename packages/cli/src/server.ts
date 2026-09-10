@@ -24,6 +24,7 @@ export interface ServerOptions {
 	port?: number;
 	maxPortAttempts?: number;
 	routes?: Route[];
+	pageTitle?: string;
 	/** Override the static asset root. Defaults to the bundled `web-dist/` next to the CLI. */
 	webDistPath?: string;
 }
@@ -62,17 +63,20 @@ const DEFAULT_WEB_DIST = path.resolve(CLI_DIR, "..", "web-dist");
 export const LOOPBACK_HOST = "127.0.0.1";
 const DEFAULT_START_PORT = 5391;
 const DEFAULT_MAX_PORT_ATTEMPTS = 100;
+const DEFAULT_PAGE_TITLE = "Stage CLI";
+const TITLE_ELEMENT_PATTERN = /<title>[\s\S]*?<\/title>/i;
 
 export async function startServer(opts: ServerOptions): Promise<ServerHandle> {
 	const webDist = path.resolve(opts.webDistPath ?? DEFAULT_WEB_DIST);
 	const compiled = (opts.routes ?? []).map(compileRoute);
 	const startPort = opts.port ?? DEFAULT_START_PORT;
 	const maxPortAttempts = opts.maxPortAttempts ?? DEFAULT_MAX_PORT_ATTEMPTS;
+	const pageTitle = opts.pageTitle ?? DEFAULT_PAGE_TITLE;
 
 	for (let i = 0; i < maxPortAttempts; i++) {
 		const port = startPort + i;
 		const server = http.createServer((req, res) => {
-			handleRequest(req, res, webDist, compiled).catch((err) => {
+			handleRequest(req, res, webDist, compiled, pageTitle).catch((err) => {
 				const msg = err instanceof Error ? err.message : String(err);
 				process.stderr.write(`request handler error: ${msg}\n`);
 				if (!res.headersSent) {
@@ -138,6 +142,7 @@ async function handleRequest(
 	res: http.ServerResponse,
 	webDist: string,
 	routes: CompiledRoute[],
+	pageTitle: string,
 ): Promise<void> {
 	// Don't parse via `new URL()` — its WHATWG normalization collapses `/../foo` to `/foo`,
 	// hiding traversal attempts before our guard runs. Strip the query string ourselves.
@@ -193,9 +198,11 @@ async function handleRequest(
 		return;
 	}
 	const filePath = path.join(webDist, rel);
+	const indexPath = path.join(webDist, "index.html");
 
+	if (filePath === indexPath && (await sendIndexFile(indexPath, pageTitle, res))) return;
 	if (await sendFile(filePath, res)) return;
-	await sendIndexFallback(webDist, res);
+	await sendIndexFallback(indexPath, pageTitle, res);
 }
 
 async function sendFile(filePath: string, res: http.ServerResponse): Promise<boolean> {
@@ -218,19 +225,53 @@ async function sendFile(filePath: string, res: http.ServerResponse): Promise<boo
 	return true;
 }
 
-async function sendIndexFallback(webDist: string, res: http.ServerResponse): Promise<void> {
-	const indexPath = path.join(webDist, "index.html");
-	let stat: Awaited<ReturnType<typeof fsp.stat>>;
+async function sendIndexFile(
+	indexPath: string,
+	pageTitle: string,
+	res: http.ServerResponse,
+): Promise<boolean> {
+	let html: string;
 	try {
-		stat = await fsp.stat(indexPath);
-	} catch {
-		res.writeHead(404, { "Content-Type": "text/plain" });
-		res.end("Not Found");
-		return;
+		html = await fsp.readFile(indexPath, "utf8");
+	} catch (err) {
+		const code = (err as NodeJS.ErrnoException).code;
+		if (code === "ENOENT" || code === "ENOTDIR") return false;
+		throw err;
 	}
+	if (!TITLE_ELEMENT_PATTERN.test(html)) throw new Error("index.html is missing a title element");
+	const rendered = html.replace(
+		TITLE_ELEMENT_PATTERN,
+		`<title>${escapeHtmlText(pageTitle)}</title>`,
+	);
 	res.writeHead(200, {
 		"Content-Type": "text/html; charset=utf-8",
-		"Content-Length": String(stat.size),
+		"Content-Length": String(Buffer.byteLength(rendered)),
 	});
-	await pipeline(createReadStream(indexPath), res);
+	res.end(rendered);
+	return true;
+}
+
+async function sendIndexFallback(
+	indexPath: string,
+	pageTitle: string,
+	res: http.ServerResponse,
+): Promise<void> {
+	if (await sendIndexFile(indexPath, pageTitle, res)) return;
+	res.writeHead(404, { "Content-Type": "text/plain" });
+	res.end("Not Found");
+}
+
+function escapeHtmlText(value: string): string {
+	return value.replace(/[&<>]/g, (character) => {
+		switch (character) {
+			case "&":
+				return "&amp;";
+			case "<":
+				return "&lt;";
+			case ">":
+				return "&gt;";
+			default:
+				throw new Error("Unexpected HTML title character");
+		}
+	});
 }

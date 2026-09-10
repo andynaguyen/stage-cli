@@ -1,11 +1,22 @@
-import type { Comment, CommentThread } from "@stagereview/types/comments";
+import {
+	COMMENT_ANCHOR,
+	type Comment,
+	type CommentThread,
+	type LineCommentThread,
+} from "@stagereview/types/comments";
 import {
 	REVIEW_ANNOTATION_SIDE,
 	REVIEW_ANNOTATION_TYPE,
 	type ReviewFeedbackAnnotation,
 	type ReviewFeedbackExport,
 } from "@stagereview/types/review-feedback";
-import { DIFF_SIDE, SCOPE_KIND, type Scope, WORKING_TREE_REF } from "./schema.js";
+import {
+	DIFF_SIDE,
+	SCOPE_KIND,
+	type Scope,
+	WORKING_TREE_REF,
+	type WorkingTreeRef,
+} from "./schema.js";
 
 const COMPLETION_STATE = {
 	PENDING: "pending",
@@ -15,7 +26,27 @@ const COMPLETION_STATE = {
 
 type CompletionState = (typeof COMPLETION_STATE)[keyof typeof COMPLETION_STATE];
 
-export const CODE_REVIEW_FEEDBACK_HEADER = "# Code Review Feedback";
+export interface ReviewFeedbackCompletion {
+	persist: () => void | Promise<void>;
+	acknowledge: () => Promise<void>;
+}
+
+const WORKING_TREE_REVIEW_LABEL = {
+	[WORKING_TREE_REF.WORK]: {
+		gitRef: "working tree",
+		diffLabel: "Uncommitted changes",
+	},
+	[WORKING_TREE_REF.STAGED]: {
+		gitRef: "--staged",
+		diffLabel: "Staged changes",
+	},
+	[WORKING_TREE_REF.UNSTAGED]: {
+		gitRef: "unstaged",
+		diffLabel: "Unstaged changes",
+	},
+} as const satisfies Record<WorkingTreeRef, { gitRef: string; diffLabel: string }>;
+
+const CODE_REVIEW_FEEDBACK_HEADER = "# Code Review Feedback";
 
 export class ReviewSessionConflictError extends Error {
 	constructor() {
@@ -26,13 +57,13 @@ export class ReviewSessionConflictError extends Error {
 
 export class ReviewFeedbackSession {
 	readonly result: Promise<ReviewFeedbackExport>;
-	readonly gitRef: string;
+	readonly scope: Scope;
 
 	private state: CompletionState = COMPLETION_STATE.PENDING;
 	private readonly resolveResult: (result: ReviewFeedbackExport) => void;
 
-	constructor(gitRef: string) {
-		this.gitRef = gitRef;
+	constructor(scope: Scope) {
+		this.scope = scope;
 		let resolveResult: ((result: ReviewFeedbackExport) => void) | undefined;
 		this.result = new Promise<ReviewFeedbackExport>((resolve) => {
 			resolveResult = resolve;
@@ -43,27 +74,34 @@ export class ReviewFeedbackSession {
 		this.resolveResult = resolveResult;
 	}
 
-	async complete(result: ReviewFeedbackExport, acknowledge: () => Promise<void>): Promise<void> {
+	async complete(
+		result: ReviewFeedbackExport,
+		completion: ReviewFeedbackCompletion,
+	): Promise<void> {
 		if (this.state !== COMPLETION_STATE.PENDING) {
 			throw new ReviewSessionConflictError();
 		}
 
 		this.state = COMPLETION_STATE.COMPLETING;
 		try {
-			await acknowledge();
+			await completion.persist();
 		} catch (error) {
 			this.state = COMPLETION_STATE.PENDING;
 			throw error;
 		}
 
 		this.state = COMPLETION_STATE.COMPLETED;
-		this.resolveResult(result);
+		try {
+			await completion.acknowledge();
+		} finally {
+			this.resolveResult(result);
+		}
 	}
 }
 
-export function buildEmptyReviewFeedbackExport(gitRef: string): ReviewFeedbackExport {
+export function buildEmptyReviewFeedbackExport(scope: Scope): ReviewFeedbackExport {
 	return {
-		gitRef,
+		gitRef: formatReviewGitRef(scope),
 		approved: false,
 		feedback: "",
 		annotations: [],
@@ -71,14 +109,14 @@ export function buildEmptyReviewFeedbackExport(gitRef: string): ReviewFeedbackEx
 }
 
 export function buildReviewFeedbackExport(
-	gitRef: string,
+	scope: Scope,
 	threads: readonly CommentThread[],
 ): ReviewFeedbackExport {
 	const unresolved = prepareThreads(threads);
 	return {
-		gitRef,
+		gitRef: formatReviewGitRef(scope),
 		approved: false,
-		feedback: formatReviewFeedback(gitRef, unresolved),
+		feedback: formatReviewFeedback(scope, unresolved),
 		annotations: formatAnnotations(unresolved),
 	};
 }
@@ -87,15 +125,7 @@ export function formatReviewGitRef(scope: Scope): string {
 	if (scope.kind === SCOPE_KIND.COMMITTED) {
 		return `${scope.mergeBaseSha}..${scope.headSha}`;
 	}
-
-	switch (scope.ref) {
-		case WORKING_TREE_REF.WORK:
-			return "working tree";
-		case WORKING_TREE_REF.STAGED:
-			return "--staged";
-		case WORKING_TREE_REF.UNSTAGED:
-			return "unstaged";
-	}
+	return WORKING_TREE_REVIEW_LABEL[scope.ref].gitRef;
 }
 
 export function serializeReviewFeedback(result: ReviewFeedbackExport): string {
@@ -115,7 +145,7 @@ function prepareThreads(threads: readonly CommentThread[]): CommentThread[] {
 	return [...unresolved].sort(compareThreads);
 }
 
-function formatReviewFeedback(gitRef: string, threads: readonly CommentThread[]): string {
+function formatReviewFeedback(scope: Scope, threads: readonly CommentThread[]): string {
 	const byFile = new Map<string, CommentThread[]>();
 	for (const thread of threads) {
 		const fileThreads = byFile.get(thread.filePath);
@@ -128,18 +158,21 @@ function formatReviewFeedback(gitRef: string, threads: readonly CommentThread[])
 		sections.push([`## ${filePath}`, ...fileThreads.map(formatThread)].join("\n\n"));
 	}
 
-	return `${CODE_REVIEW_FEEDBACK_HEADER}\n\n**Diff:** ${formatDiffLabel(gitRef)}\n\n${sections.join("\n\n")}\n`;
+	return `${CODE_REVIEW_FEEDBACK_HEADER}\n\n**Diff:** ${formatDiffLabel(scope)}\n\n${sections.join("\n\n")}\n`;
 }
 
 function compareThreads(left: CommentThread, right: CommentThread): number {
-	return (
-		compareText(left.filePath, right.filePath) ||
-		left.startLine - right.startLine ||
-		left.endLine - right.endLine ||
-		compareText(left.side, right.side) ||
-		compareText(left.createdAt, right.createdAt) ||
-		compareText(left.id, right.id)
-	);
+	const fileOrder = compareText(left.filePath, right.filePath);
+	if (fileOrder !== 0) return fileOrder;
+	if (left.anchor !== right.anchor) return left.anchor === COMMENT_ANCHOR.FILE ? -1 : 1;
+	if (left.anchor === COMMENT_ANCHOR.LINE && right.anchor === COMMENT_ANCHOR.LINE) {
+		const lineOrder =
+			left.startLine - right.startLine ||
+			left.endLine - right.endLine ||
+			compareText(left.side, right.side);
+		if (lineOrder !== 0) return lineOrder;
+	}
+	return compareText(left.createdAt, right.createdAt) || compareText(left.id, right.id);
 }
 
 function compareText(left: string, right: string): number {
@@ -149,30 +182,36 @@ function compareText(left: string, right: string): number {
 }
 
 function formatThread(thread: CommentThread): string {
-	const range =
-		thread.startLine === thread.endLine
-			? `Line ${thread.startLine}`
-			: `Lines ${thread.startLine}-${thread.endLine}`;
+	const heading = (() => {
+		if (thread.anchor === COMMENT_ANCHOR.FILE) return "File comment";
+		const range =
+			thread.startLine === thread.endLine
+				? `L${thread.startLine}`
+				: `L${thread.startLine}-${thread.endLine}`;
+		return `${range} (${formatSide(thread.side)})`;
+	})();
 	const comments = sortComments(thread.comments).map((comment) => comment.body);
 
-	return [`### ${range} (${formatSide(thread.side)})`, ...comments].join("\n\n");
+	return [`### ${heading}`, ...comments].join("\n\n");
 }
 
 function formatAnnotations(threads: readonly CommentThread[]): ReviewFeedbackAnnotation[] {
 	return threads.flatMap((thread) =>
-		sortComments(thread.comments).map((comment) => ({
-			id: comment.id,
-			threadId: thread.id,
-			type: REVIEW_ANNOTATION_TYPE.COMMENT,
-			filePath: thread.filePath,
-			lineStart: thread.startLine,
-			lineEnd: thread.endLine,
-			side: formatSide(thread.side),
-			text: comment.body,
-			authorId: comment.authorId,
-			createdAt: comment.createdAt,
-			updatedAt: comment.updatedAt,
-		})),
+		thread.anchor === COMMENT_ANCHOR.FILE
+			? []
+			: sortComments(thread.comments).map((comment) => ({
+					id: comment.id,
+					threadId: thread.id,
+					type: REVIEW_ANNOTATION_TYPE.COMMENT,
+					filePath: thread.filePath,
+					lineStart: thread.startLine,
+					lineEnd: thread.endLine,
+					side: formatSide(thread.side),
+					text: comment.body,
+					authorId: comment.authorId,
+					createdAt: comment.createdAt,
+					updatedAt: comment.updatedAt,
+				})),
 	);
 }
 
@@ -182,7 +221,7 @@ function sortComments(comments: readonly Comment[]): Comment[] {
 	);
 }
 
-function formatSide(side: CommentThread["side"]): ReviewFeedbackAnnotation["side"] {
+function formatSide(side: LineCommentThread["side"]): ReviewFeedbackAnnotation["side"] {
 	switch (side) {
 		case DIFF_SIDE.ADDITIONS:
 			return REVIEW_ANNOTATION_SIDE.NEW;
@@ -191,15 +230,9 @@ function formatSide(side: CommentThread["side"]): ReviewFeedbackAnnotation["side
 	}
 }
 
-function formatDiffLabel(gitRef: string): string {
-	switch (gitRef) {
-		case "working tree":
-			return "Uncommitted changes";
-		case "--staged":
-			return "Staged changes";
-		case "unstaged":
-			return "Unstaged changes";
-		default:
-			return `\`${gitRef}\``;
+function formatDiffLabel(scope: Scope): string {
+	if (scope.kind === SCOPE_KIND.COMMITTED) {
+		return `\`${formatReviewGitRef(scope)}\``;
 	}
+	return WORKING_TREE_REVIEW_LABEL[scope.ref].diffLabel;
 }

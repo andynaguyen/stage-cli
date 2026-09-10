@@ -25,22 +25,48 @@
   <a href="https://github.com/ReviewStage/stage-cli/blob/main/LICENSE"><img src="https://img.shields.io/npm/l/stagereview.svg" alt="license"></a>
 </p>
 
-## Install
+## Installation
+
+### Install manually
+
+Install the latest CLI tarball from this fork's GitHub Releases. This requires Node.js 20 or newer
+and the [GitHub CLI](https://cli.github.com/)—run `gh auth login` first if the repository is private.
 
 ```bash
-npm install -g stagereview
+gh release download \
+  --repo andynaguyen/stage-cli \
+  --pattern "*.tgz" \
+  --output stagereview.tgz
+npm install -g ./stagereview.tgz
 ```
 
 Then add the skill to your agent:
 
 ```bash
-npx skills add ReviewStage/stage-cli
+npx skills add andynaguyen/stage-cli
 ```
+
+### Install with your coding agent
+
+Open the git repository you want to review in Codex, Claude Code, Cursor, or another coding agent
+that can read files and run shell commands. Then give it this prompt:
+
+```text
+Install Stage for me. Read and follow the agent onboarding playbook at:
+https://github.com/andynaguyen/stage-cli/blob/main/ONBOARDING.md
+
+Work from the root of the git repository I currently have open. Run the machine steps
+yourself, including uninstalling an existing Stage CLI installation if one is present.
+Pause only if authentication, permissions, or an unknown installation requires my input.
+```
+
+The [agent onboarding playbook](ONBOARDING.md) tells the agent how to remove an existing CLI,
+install the latest release and `stage-chapters` skill, and verify the installation.
 
 ## Uninstall
 
 ```bash
-npx skills remove ReviewStage/stage-cli
+npx skills remove andynaguyen/stage-cli
 npm uninstall -g stagereview
 ```
 
@@ -53,6 +79,8 @@ In your AI agent, run:
 ```
 
 This organizes your local changes into reviewable chapters and opens a browser UI. Everything happens on your machine.
+
+When you click **Address comments**, Stage hands off unresolved comments to the coding agent so it can address them in the same task.
 
 ### Options
 
@@ -101,6 +129,30 @@ dist/**
 Ignored files still appear in the "Other changes" chapter so nothing is silently hidden. Comments (`#`), blank lines, and negation patterns (`!`) are supported — last matching pattern wins.
 
 <img width="1840" height="1196" alt="Stage CLI" src="https://raw.githubusercontent.com/ReviewStage/stage-cli/main/assets/screenshot.png" />
+
+## Release a fork
+
+Fork maintainers can distribute the CLI without publishing to npm. The release script builds and
+verifies the repository, creates an installable npm tarball, and attaches it to a GitHub Release.
+
+Before releasing, update the version in `packages/cli/package.json`, commit and push the change,
+and authenticate the GitHub CLI with `gh auth login`. The current branch must be clean and match
+its upstream branch.
+
+Verify the package without changing GitHub:
+
+```bash
+pnpm run release -- --dry-run
+```
+
+Create the `v<version>` tag and GitHub Release:
+
+```bash
+pnpm release
+```
+
+The installation commands above always download the latest release, so they do not need to change
+when the package version changes.
 
 ## License
 

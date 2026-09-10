@@ -1,9 +1,10 @@
 // @vitest-environment happy-dom
 
-import { act, render, waitFor } from "@testing-library/react";
+import { COMMENT_ANCHOR } from "@stagereview/types/comments";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { toast } from "@/components/ui/sonner";
-import { CommentThreadsProvider } from "../comment-threads-context";
+import { CommentThreadsProvider, useCommentThreadsContext } from "../comment-threads-context";
 import { makeWrapper } from "./fixtures";
 
 vi.mock("@/components/ui/sonner", () => ({ toast: { error: vi.fn(), dismiss: vi.fn() } }));
@@ -19,6 +20,16 @@ function stubFetch(status: number, body: string): void {
 		vi.fn(
 			async () => new Response(body, { status, headers: { "Content-Type": "application/json" } }),
 		),
+	);
+}
+
+function ThreadGroups() {
+	const { threadsByFile } = useCommentThreadsContext();
+	const group = threadsByFile.get("src/example.ts");
+	return (
+		<output data-testid="thread-groups">
+			{group === undefined ? "loading" : `${group.fileThreads.length}:${group.lineThreads.length}`}
+		</output>
 	);
 }
 
@@ -55,6 +66,55 @@ describe("CommentThreadsProvider", () => {
 
 		await waitFor(() => expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1));
 		expect(vi.mocked(toast.error)).not.toHaveBeenCalled();
+	});
+
+	it("partitions file and line anchors once in the comment data boundary", async () => {
+		const shared = {
+			filePath: "src/example.ts",
+			resolvedAt: null,
+			createdAt: "2026-07-26T00:00:00.000Z",
+			updatedAt: "2026-07-26T00:00:00.000Z",
+			comments: [
+				{
+					id: "comment-1",
+					body: "Review this",
+					authorId: "local",
+					createdAt: "2026-07-26T00:00:00.000Z",
+					updatedAt: "2026-07-26T00:00:00.000Z",
+				},
+			],
+		};
+		stubFetch(
+			200,
+			JSON.stringify([
+				{
+					...shared,
+					id: "file-thread",
+					anchor: COMMENT_ANCHOR.FILE,
+					side: null,
+					startLine: null,
+					endLine: null,
+				},
+				{
+					...shared,
+					id: "line-thread",
+					anchor: COMMENT_ANCHOR.LINE,
+					side: "additions",
+					startLine: 4,
+					endLine: 4,
+				},
+			]),
+		);
+		const { Wrapper } = makeWrapper();
+
+		render(
+			<CommentThreadsProvider runId="run1">
+				<ThreadGroups />
+			</CommentThreadsProvider>,
+			{ wrapper: Wrapper },
+		);
+
+		await waitFor(() => expect(screen.getByTestId("thread-groups").textContent).toBe("1:1"));
 	});
 
 	it("dismisses the error toast once a later fetch recovers", async () => {

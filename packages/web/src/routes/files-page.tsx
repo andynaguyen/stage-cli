@@ -1,7 +1,8 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { FileDiffList, FilePicker, SidebarLayout, type ViewedConfig } from "@/components/files";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useProvideCollapseActions } from "@/lib/collapse-actions-context";
+import { useCommentThreadsContext } from "@/lib/comment-threads-context";
 import { FILE_STATUS, FILE_VIEWED_STATE } from "@/lib/diff-types";
 import { buildFileTree, flattenFileTree, sortFileTree } from "@/lib/file-tree";
 import { type FileDiffEntry, useFileDiffEntries } from "@/lib/parse-diff";
@@ -15,10 +16,21 @@ const NO_COMMENT_COUNTS: Map<string, number> = new Map();
 
 interface FilesPageProps {
 	runId: string;
+	navigationTarget?: FileNavigationTarget;
 }
 
-export function FilesPage({ runId }: FilesPageProps) {
+export const FILE_NAVIGATION_TARGET = {
+	FILE: "file",
+	THREAD: "thread",
+} as const;
+
+export type FileNavigationTarget =
+	| { type: typeof FILE_NAVIGATION_TARGET.FILE; filePath: string }
+	| { type: typeof FILE_NAVIGATION_TARGET.THREAD; threadId: string };
+
+export function FilesPage({ runId, navigationTarget }: FilesPageProps) {
 	const { data: diffData, isLoading, error } = useDiffPatch(runId);
+	const { threads } = useCommentThreadsContext();
 
 	const rawEntries = useFileDiffEntries(diffData?.patch, diffData?.fileContents);
 	const entries = useMemo(() => sortFileDiffEntries(rawEntries), [rawEntries]);
@@ -51,12 +63,43 @@ export function FilesPage({ runId }: FilesPageProps) {
 	const collapseState = useFileCollapseState(defaultCollapsedFileIds, filePaths, runId);
 	useProvideCollapseActions(collapseState, filePaths.length);
 
-	const { diffListRef, currentFilePath, keyboardFocusedFilePath, handleSelectFile } =
-		useFileDiffNavigation({
-			files,
-			onToggleViewed: handleToggleViewed,
-			collapse: collapseState,
-		});
+	const {
+		diffListRef,
+		currentFilePath,
+		keyboardFocusedFilePath,
+		handleSelectFile,
+		scrollToCommentThread,
+		cancelScrollToLine,
+	} = useFileDiffNavigation({
+		files,
+		onToggleViewed: handleToggleViewed,
+		collapse: collapseState,
+	});
+	const targetType = navigationTarget?.type;
+	const targetId =
+		navigationTarget?.type === FILE_NAVIGATION_TARGET.FILE
+			? navigationTarget.filePath
+			: navigationTarget?.threadId;
+
+	useEffect(() => {
+		if (diffData === undefined || targetType === undefined || targetId === undefined) return;
+		if (targetType === FILE_NAVIGATION_TARGET.FILE) {
+			handleSelectFile(targetId);
+			return cancelScrollToLine;
+		}
+		const thread = threads.find((candidate) => candidate.id === targetId);
+		if (thread === undefined) return;
+		scrollToCommentThread({ id: thread.id, filePath: thread.filePath });
+		return cancelScrollToLine;
+	}, [
+		diffData,
+		targetType,
+		targetId,
+		threads,
+		handleSelectFile,
+		scrollToCommentThread,
+		cancelScrollToLine,
+	]);
 
 	const viewed = useMemo<ViewedConfig>(
 		() => ({

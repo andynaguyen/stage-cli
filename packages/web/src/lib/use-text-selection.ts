@@ -7,6 +7,8 @@ export interface TextSelectionInfo {
 	rect: DOMRect;
 	/** Pierre line range derived from the selection. */
 	lineRange: SelectedLineRange;
+	/** Literal browser-selected text sent to Ask Agent as context. */
+	selectedText: string;
 }
 
 interface SelectedLineRangeParams {
@@ -277,7 +279,7 @@ export function useTextSelection(containerRef: React.RefObject<HTMLDivElement | 
 
 				const lineRange = buildSelectedLineRange({ startLine, endLine, startSide, endSide });
 				if (!lineRange) return;
-				setSelectionInfo({ rect, lineRange });
+				setSelectionInfo({ rect, lineRange, selectedText: selection.toString() });
 			});
 		};
 

@@ -1,14 +1,28 @@
 import {
+	COMMENT_ANCHOR,
 	type Comment,
 	type CommentThread,
 	CommentThreadsResponseSchema,
 	type CreateCommentThreadBody,
+	type FileCommentThread,
+	type LineCommentThread,
 } from "@stagereview/types/comments";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { jsonFetch } from "./use-view-state";
 
-export type { Comment, CommentThread, CreateCommentThreadBody };
+export type {
+	Comment,
+	CommentThread,
+	CreateCommentThreadBody,
+	FileCommentThread,
+	LineCommentThread,
+};
+
+export interface CommentThreadsForFile {
+	fileThreads: readonly FileCommentThread[];
+	lineThreads: readonly LineCommentThread[];
+}
 
 const COMMENT_THREADS_ROOT = "comment-threads";
 
@@ -32,7 +46,7 @@ const jsonRequest = (method: string, body?: unknown): RequestInit => ({
 export interface UseCommentThreadsResult {
 	threads: CommentThread[];
 	/** Stable reference; rebuilt only when the underlying query data changes. */
-	threadsByFile: ReadonlyMap<string, CommentThread[]>;
+	threadsByFile: ReadonlyMap<string, CommentThreadsForFile>;
 	isLoading: boolean;
 	error: unknown;
 	createThread: (input: CreateCommentThreadBody) => Promise<CommentThread>;
@@ -148,12 +162,19 @@ export function useCommentThreads(runId: string): UseCommentThreadsResult {
 	);
 }
 
-function groupByFile(threads: CommentThread[]): ReadonlyMap<string, CommentThread[]> {
-	const map = new Map<string, CommentThread[]>();
+function groupByFile(threads: CommentThread[]): ReadonlyMap<string, CommentThreadsForFile> {
+	const map = new Map<
+		string,
+		{ fileThreads: FileCommentThread[]; lineThreads: LineCommentThread[] }
+	>();
 	for (const thread of threads) {
-		const list = map.get(thread.filePath);
-		if (list) list.push(thread);
-		else map.set(thread.filePath, [thread]);
+		let group = map.get(thread.filePath);
+		if (group === undefined) {
+			group = { fileThreads: [], lineThreads: [] };
+			map.set(thread.filePath, group);
+		}
+		if (thread.anchor === COMMENT_ANCHOR.FILE) group.fileThreads.push(thread);
+		else group.lineThreads.push(thread);
 	}
 	return map;
 }

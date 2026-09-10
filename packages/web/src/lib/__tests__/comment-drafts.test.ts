@@ -1,3 +1,4 @@
+import { COMMENT_ANCHOR } from "@stagereview/types/comments";
 import { describe, expect, it } from "vitest";
 import {
 	buildCommentAnnotations,
@@ -8,17 +9,19 @@ import {
 	findDraftAt,
 	isSameAnchor,
 	readDraftBody,
+	toSelectedLineRange,
 	upsertDraft,
 	writeDraftBody,
 } from "../comment-drafts";
-import type { CommentThread } from "../use-comment-threads";
+import type { LineCommentThread } from "../use-comment-threads";
 
 function makeThread(
-	over: Partial<CommentThread> & Pick<CommentThread, "side" | "endLine">,
-): CommentThread {
+	over: Partial<LineCommentThread> & Pick<LineCommentThread, "side" | "endLine">,
+): LineCommentThread {
 	return {
 		id: `t-${over.side}-${over.endLine}`,
 		filePath: "a.ts",
+		anchor: COMMENT_ANCHOR.LINE,
 		startLine: over.endLine,
 		resolvedAt: null,
 		createdAt: "2026-06-08T00:00:00.000Z",
@@ -39,6 +42,17 @@ function rowFor(
 ) {
 	return annotations.find((a) => a.side === side && a.lineNumber === lineNumber);
 }
+
+describe("toSelectedLineRange", () => {
+	it("keeps every line in a multiline draft on the same diff side", () => {
+		expect(toSelectedLineRange(draftState("additions", 4, 7))).toEqual({
+			start: 4,
+			side: "additions",
+			end: 7,
+			endSide: "additions",
+		});
+	});
+});
 
 describe("buildCommentAnnotations", () => {
 	it("returns no annotations for no threads and no drafts", () => {

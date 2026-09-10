@@ -3,13 +3,15 @@ import { eq } from "drizzle-orm";
 import type { StageDb } from "../db/client.js";
 import { chapterRun } from "../db/schema/index.js";
 import { type GitHubRepo, parseGitHubRepo } from "../github/index.js";
+import type { ScopeKeyParts } from "../runs/scope-key.js";
 import type { RouteHandler, RouteParams } from "../server.js";
 import { writeJson } from "./json.js";
 
 type Res = Parameters<RouteHandler>[1];
 type Req = Parameters<RouteHandler>[0];
 
-export interface RunRepo {
+export interface RunRepo extends ScopeKeyParts {
+	runId: string;
 	repoRoot: string;
 	originUrl: string | null;
 	/** PR this run targets (`--pr`), or null to fall back to the checked-out branch's PR. */
@@ -35,7 +37,17 @@ export function resolveRun(db: StageDb, params: RouteParams, res: Res): RunRepo 
 		});
 		return null;
 	}
-	return { repoRoot, originUrl: run.originUrl, prNumber: run.prNumber };
+	return {
+		runId: run.id,
+		repoRoot,
+		originUrl: run.originUrl,
+		prNumber: run.prNumber,
+		scopeKind: run.scopeKind,
+		workingTreeRef: run.workingTreeRef,
+		baseSha: run.baseSha,
+		headSha: run.headSha,
+		mergeBaseSha: run.mergeBaseSha,
+	};
 }
 
 export function requireRepo(run: RunRepo, res: Res): GitHubRepo | null {

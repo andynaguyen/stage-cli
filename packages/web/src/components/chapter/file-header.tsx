@@ -119,7 +119,7 @@ export function FileHeader({
 	return (
 		<div
 			className={cn(
-				"group/file-header sticky top-[var(--content-top)] z-10 flex w-full items-center gap-2 border border-border bg-muted px-3 py-2 text-left transition-colors",
+				"group/file-header sticky top-[var(--content-top)] z-10 flex w-full items-center gap-2 border border-border bg-muted px-3 py-2 text-left transition-colors before:pointer-events-none before:absolute before:inset-x-[-1px] before:-top-1 before:h-1 before:bg-background",
 				isCollapsed ? "rounded-lg" : "rounded-t-lg",
 			)}
 		>

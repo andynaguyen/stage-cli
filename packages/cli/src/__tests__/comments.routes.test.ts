@@ -2,7 +2,11 @@ import fs from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
-import type { CommentThread, CreateCommentThreadBody } from "@stagereview/types/comments";
+import {
+	COMMENT_ANCHOR,
+	type CommentThread,
+	type CreateCommentThreadBody,
+} from "@stagereview/types/comments";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { closeDb, getDb } from "../db/client.js";
 import { comment, commentThread } from "../db/schema/index.js";
@@ -89,8 +93,16 @@ function seedRun(over: Partial<ChaptersFile> = {}): string {
 	return insertChaptersFile(db, makeFixture(over), makeRepoContext()).runId;
 }
 
-function makeThreadBody(over: Partial<CreateCommentThreadBody> = {}): CreateCommentThreadBody {
+type CreateLineCommentThreadBody = Extract<
+	CreateCommentThreadBody,
+	{ anchor: typeof COMMENT_ANCHOR.LINE }
+>;
+
+function makeThreadBody(
+	over: Partial<CreateLineCommentThreadBody> = {},
+): CreateLineCommentThreadBody {
 	return {
+		anchor: COMMENT_ANCHOR.LINE,
 		filePath: "src/foo.ts",
 		side: "additions",
 		startLine: 5,
@@ -103,7 +115,7 @@ function makeThreadBody(over: Partial<CreateCommentThreadBody> = {}): CreateComm
 async function createThread(
 	port: number,
 	runId: string,
-	over: Partial<CreateCommentThreadBody> = {},
+	over: Partial<CreateLineCommentThreadBody> = {},
 ): Promise<CommentThread> {
 	const res = await send(port, "POST", `/api/runs/${runId}/comment-threads`, makeThreadBody(over));
 	expect(res.status).toBe(201);
@@ -138,6 +150,27 @@ describe("comment threads API", () => {
 		const db = getDb({ dbPath });
 		expect(db.select().from(commentThread).all()).toHaveLength(1);
 		expect(db.select().from(comment).all()).toHaveLength(1);
+	});
+
+	it("POST creates a file-level thread without a line anchor", async () => {
+		const runId = seedRun();
+		const { port } = await startWithRoutes();
+
+		const response = await send(port, "POST", `/api/runs/${runId}/comment-threads`, {
+			anchor: COMMENT_ANCHOR.FILE,
+			filePath: "src/foo.ts",
+			body: "Consider splitting this file.",
+		});
+
+		expect(response.status).toBe(201);
+		expect(response.body).toMatchObject({
+			anchor: "file",
+			filePath: "src/foo.ts",
+			side: null,
+			startLine: null,
+			endLine: null,
+			comments: [{ body: "Consider splitting this file." }],
+		});
 	});
 
 	it("GET lists threads (oldest comment first) and returns [] when empty", async () => {

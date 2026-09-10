@@ -119,6 +119,12 @@ export function useFileDiffNavigation({
 	const cancelScrollToLine = useCallback(() => {
 		diffListRef.current?.cancelScrollToLine();
 	}, []);
+	const scrollToCommentThread = useCallback(
+		(...args: Parameters<FileDiffListHandle["scrollToCommentThread"]>) => {
+			diffListRef.current?.scrollToCommentThread(...args);
+		},
+		[],
+	);
 
 	return {
 		diffListRef,
@@ -127,6 +133,7 @@ export function useFileDiffNavigation({
 		selectFile,
 		handleSelectFile,
 		scrollToLine,
+		scrollToCommentThread,
 		cancelScrollToLine,
 	};
 }

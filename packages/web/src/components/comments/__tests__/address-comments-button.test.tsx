@@ -1,12 +1,17 @@
 // @vitest-environment happy-dom
 
-import type { Comment, CommentThread } from "@stagereview/types/comments";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+	COMMENT_ANCHOR,
+	type Comment,
+	type CommentThread,
+	type LineCommentThread,
+} from "@stagereview/types/comments";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { toast } from "@/components/ui/sonner";
 import { makeWrapper } from "@/lib/__tests__/fixtures";
 import { CommentThreadsProvider } from "@/lib/comment-threads-context";
-import { SendToCodexButton } from "../send-to-codex-button";
+import { AddressCommentsButton } from "../address-comments-button";
 
 vi.mock("@/components/ui/sonner", () => ({
 	toast: { success: vi.fn(), error: vi.fn(), dismiss: vi.fn() },
@@ -28,10 +33,11 @@ function makeComment(id: string, body: string): Comment {
 	};
 }
 
-function makeThread(over: Partial<CommentThread> = {}): CommentThread {
+function makeThread(over: Partial<LineCommentThread> = {}): LineCommentThread {
 	return {
 		id: "thread-1",
 		filePath: "src/example.ts",
+		anchor: COMMENT_ANCHOR.LINE,
 		side: "additions",
 		startLine: 4,
 		endLine: 4,
@@ -50,7 +56,14 @@ function jsonResponse(body: unknown, status = 200): Response {
 	});
 }
 
-function renderButton(threads: CommentThread[], submit: () => Promise<Response>) {
+function noContentResponse(): Response {
+	return new Response(null, { status: 204 });
+}
+function renderButton(
+	threads: CommentThread[],
+	submit: () => Promise<Response>,
+	onSelectThread = vi.fn(),
+) {
 	vi.stubGlobal(
 		"fetch",
 		vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -62,32 +75,21 @@ function renderButton(threads: CommentThread[], submit: () => Promise<Response>)
 	const { Wrapper } = makeWrapper();
 	return render(
 		<CommentThreadsProvider runId="run-1">
-			<SendToCodexButton runId="run-1" />
+			<AddressCommentsButton onSelectThread={onSelectThread} />
 		</CommentThreadsProvider>,
 		{ wrapper: Wrapper },
 	);
 }
-
 function postCount(): number {
 	return vi.mocked(fetch).mock.calls.filter(([, init]) => (init?.method ?? "GET") === "POST")
 		.length;
 }
-
-function getConfirmationButton(trigger: HTMLElement): HTMLElement {
-	const confirm = screen
-		.getAllByRole("button", { name: "Send to Codex" })
-		.find((button) => button !== trigger);
-	if (confirm === undefined) throw new Error("Send confirmation button was not rendered");
-	return confirm;
-}
-
-describe("SendToCodexButton", () => {
+describe("AddressCommentsButton", () => {
 	it("disables the action when no unresolved threads exist", async () => {
 		renderButton([makeThread({ resolvedAt: "2026-07-24T11:00:00.000Z" })], async () =>
-			jsonResponse({ threadCount: 1, commentCount: 1 }),
+			noContentResponse(),
 		);
-
-		const button = await screen.findByRole("button", { name: "Send to Codex" });
+		const button = await screen.findByRole("button", { name: "Address comments" });
 		expect(button.hasAttribute("disabled")).toBe(true);
 	});
 
@@ -113,49 +115,42 @@ describe("SendToCodexButton", () => {
 					comments: [makeComment("comment-4", "This is already resolved")],
 				}),
 			],
-			async () => jsonResponse({ threadCount: 2, commentCount: 3 }),
+			async () => noContentResponse(),
 		);
-
-		const trigger = await screen.findByRole("button", { name: "Send to Codex" });
-
+		const trigger = await screen.findByRole("button", { name: "Address comments" });
 		fireEvent.click(trigger);
 
-		expect(await screen.findByText("Send review to Codex")).toBeTruthy();
-		expect(
-			screen.queryByText("Codex will receive every unresolved comment thread in this review."),
-		).toBeNull();
-		expect(screen.queryByText("Stage closes after they are sent.")).toBeNull();
-		expect(screen.queryByText("Pending comments")).toBeNull();
-
-		const commentsTrigger = screen.getByRole("button", { name: "Expand comments (3)" });
-		expect(within(commentsTrigger).getByText("Comments")).toBeTruthy();
-		expect(within(commentsTrigger).getByText("3")).toBeTruthy();
-		expect(screen.queryByText("Please change this")).toBeNull();
-
-		fireEvent.click(commentsTrigger);
-
-		expect(screen.getByRole("button", { name: "Collapse comments (3)" })).toBeTruthy();
+		expect(await screen.findByText("Comments")).toBeTruthy();
+		expect(screen.getByText("3")).toBeTruthy();
 		expect(screen.getByText("Please change this")).toBeTruthy();
 		expect(screen.getByText("Also update the test")).toBeTruthy();
 		expect(screen.getByText("Handle the empty state")).toBeTruthy();
-		expect(screen.getByText("Lines 4–6")).toBeTruthy();
+		expect(screen.getAllByText("L4-6")).toHaveLength(2);
+		expect(screen.getByText("L4")).toBeTruthy();
 		expect(screen.queryByText("This is already resolved")).toBeNull();
+		expect(postCount()).toBe(0);
+	});
 
-		const cancel = screen.getByRole("button", { name: "Cancel" });
-		expect(cancel.parentElement?.className).toContain("justify-between");
-		expect(cancel.parentElement?.firstElementChild).toBe(cancel);
+	it("selects an unresolved thread from its preview", async () => {
+		const onSelectThread = vi.fn();
+		renderButton([makeThread()], async () => noContentResponse(), onSelectThread);
+		fireEvent.click(await screen.findByRole("button", { name: "Address comments" }));
+		fireEvent.click(await screen.findByRole("button", { name: "Go to src/example.ts, L4" }));
+
+		expect(onSelectThread).toHaveBeenCalledWith("thread-1");
+		expect(screen.queryByText("Comments")).toBeNull();
 		expect(postCount()).toBe(0);
 	});
 
 	it("cancels without submitting", async () => {
-		renderButton([makeThread()], async () => jsonResponse({ threadCount: 1, commentCount: 1 }));
-		const trigger = await screen.findByRole("button", { name: "Send to Codex" });
+		renderButton([makeThread()], async () => noContentResponse());
+		const trigger = await screen.findByRole("button", { name: "Address comments" });
 		fireEvent.click(trigger);
-		await screen.findByText("Send review to Codex");
+		await screen.findByText("Comments");
 
 		fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
-		await waitFor(() => expect(screen.queryByText("Send review to Codex")).toBeNull());
+		await waitFor(() => expect(screen.queryByText("Comments")).toBeNull());
 		expect(postCount()).toBe(0);
 	});
 
@@ -165,23 +160,21 @@ describe("SendToCodexButton", () => {
 			finishSubmission = resolve;
 		});
 		renderButton([makeThread()], () => pending);
-		const trigger = await screen.findByRole("button", { name: "Send to Codex" });
+		const trigger = await screen.findByRole("button", { name: "Address comments" });
 		fireEvent.click(trigger);
-		await screen.findByText("Send review to Codex");
-		const confirm = getConfirmationButton(trigger);
+		await screen.findByText("Comments");
+		const confirm = screen.getByRole("button", { name: "Submit" });
 
 		fireEvent.click(confirm);
 		await waitFor(() => expect(confirm.hasAttribute("disabled")).toBe(true));
-		expect(confirm.textContent).toContain("Send to Codex");
-		expect(trigger.textContent).toContain("Send to Codex");
-		expect(screen.queryByText("Sending…")).toBeNull();
-		expect(confirm.hasAttribute("disabled")).toBe(true);
+		expect(confirm.textContent).toContain("Submit");
+		expect(trigger.textContent).toContain("Address comments");
 
-		finishSubmission(jsonResponse({ threadCount: 1, commentCount: 1 }));
-		await waitFor(() => expect(screen.queryByText("Send review to Codex")).toBeNull());
-		expect(trigger.textContent).toContain("Send to Codex");
+		finishSubmission(noContentResponse());
+		await waitFor(() => expect(screen.queryByText("Comments")).toBeNull());
+		expect(trigger.textContent).toContain("Address comments");
 		expect(trigger.hasAttribute("disabled")).toBe(true);
-		expect(vi.mocked(toast.success)).toHaveBeenCalledWith("Comments sent to Codex");
+		expect(vi.mocked(toast.success)).toHaveBeenCalledWith("Comments ready to address");
 
 		fireEvent.click(trigger);
 		expect(postCount()).toBe(1);
@@ -191,22 +184,20 @@ describe("SendToCodexButton", () => {
 		let submissions = 0;
 		renderButton([makeThread()], async () => {
 			submissions += 1;
-			return submissions === 1
-				? jsonResponse({ error: "failed" }, 500)
-				: jsonResponse({ threadCount: 1, commentCount: 1 });
+			return submissions === 1 ? jsonResponse({ error: "failed" }, 500) : noContentResponse();
 		});
-		const trigger = await screen.findByRole("button", { name: "Send to Codex" });
+		const trigger = await screen.findByRole("button", { name: "Address comments" });
 		fireEvent.click(trigger);
-		await screen.findByText("Send review to Codex");
-		const confirm = getConfirmationButton(trigger);
+		await screen.findByText("Comments");
+		const confirm = screen.getByRole("button", { name: "Submit" });
 
 		fireEvent.click(confirm);
 		expect(await screen.findByRole("alert")).toBeTruthy();
 		expect(confirm.hasAttribute("disabled")).toBe(false);
 
 		fireEvent.click(confirm);
-		await waitFor(() => expect(screen.queryByText("Send review to Codex")).toBeNull());
-		expect(vi.mocked(toast.success)).toHaveBeenCalledWith("Comments sent to Codex");
+		await waitFor(() => expect(screen.queryByText("Comments")).toBeNull());
+		expect(vi.mocked(toast.success)).toHaveBeenCalledWith("Comments ready to address");
 		expect(submissions).toBe(2);
 	});
 });

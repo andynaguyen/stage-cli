@@ -1,10 +1,9 @@
 import type { ServerResponse } from "node:http";
 import { finished } from "node:stream/promises";
-import type {
-	ReviewFeedbackExport,
-	ReviewFeedbackResponse,
-} from "@stagereview/types/review-feedback";
+import type { ReviewFeedbackExport } from "@stagereview/types/review-feedback";
+import { inArray } from "drizzle-orm";
 import type { StageDb } from "../db/client.js";
+import { commentThread } from "../db/schema/index.js";
 import {
 	buildReviewFeedbackExport,
 	type ReviewFeedbackSession,
@@ -15,33 +14,38 @@ import { CommentThreadQuery } from "./comment-thread-query.js";
 import { writeJson } from "./json.js";
 import { enforceSameOrigin } from "./pull-request-shared.js";
 
-export function reviewFeedbackRoutes(db: StageDb, session: ReviewFeedbackSession): Route[] {
+export function reviewFeedbackRoutes(
+	db: StageDb,
+	runId: string,
+	session: ReviewFeedbackSession,
+): Route[] {
 	const comments = new CommentThreadQuery(db);
 
 	return [
 		{
 			method: "POST",
-			pattern: "/api/runs/:runId/feedback",
-			handler: async (req, res, params) => {
+			pattern: "/api/feedback",
+			handler: async (req, res) => {
 				if (!enforceSameOrigin(req, res)) return;
 
-				const threads = comments.listUnresolvedForRun(params.runId);
+				const threads = comments.listUnresolvedForRun(runId);
 				if (threads === null) {
-					writeJson(res, 404, { error: `Run ${params.runId} not found` });
-					return;
+					throw new Error(`Active review run ${runId} not found`);
 				}
 				if (threads.length === 0) {
 					writeJson(res, 409, { error: "No unresolved review feedback is available" });
 					return;
 				}
 
-				const response: ReviewFeedbackResponse = {
-					threadCount: threads.length,
-					commentCount: threads.reduce((count, thread) => count + thread.comments.length, 0),
-				};
-				const feedback = buildReviewFeedbackExport(session.gitRef, threads);
+				const feedback = buildReviewFeedbackExport(session.scope, threads);
 
-				await completeReviewSession(res, session, feedback, response);
+				await completeReviewSession(
+					res,
+					session,
+					feedback,
+					db,
+					threads.map((thread) => thread.id),
+				);
 			},
 		},
 	];
@@ -51,13 +55,23 @@ async function completeReviewSession(
 	res: ServerResponse,
 	session: ReviewFeedbackSession,
 	result: ReviewFeedbackExport,
-	response: ReviewFeedbackResponse,
+	db: StageDb,
+	threadIds: string[],
 ): Promise<void> {
 	try {
-		await session.complete(result, async () => {
-			const responseFinished = finished(res, { cleanup: true });
-			writeJson(res, 200, response);
-			await responseFinished;
+		await session.complete(result, {
+			persist: () => {
+				db.update(commentThread)
+					.set({ resolvedAt: new Date() })
+					.where(inArray(commentThread.id, threadIds))
+					.run();
+			},
+			acknowledge: async () => {
+				const responseFinished = finished(res, { cleanup: true });
+				res.writeHead(204);
+				res.end();
+				await responseFinished;
+			},
 		});
 	} catch (error) {
 		if (error instanceof ReviewSessionConflictError) {

@@ -3,13 +3,22 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useSta
 import { FileHeader } from "@/components/chapter/file-header";
 import { PierreDiffViewer } from "@/components/chapter/pierre-diff-viewer";
 import { findRenderedDiffLine } from "@/components/chapter/rendered-line-target";
+import { FileComments } from "@/components/comments/file-comments";
+import { useCommentThreadsContext } from "@/lib/comment-threads-context";
 import type { AnnotatedLineRef, DiffSide, LineRef } from "@/lib/diff-types";
 import type { FileDiffEntry } from "@/lib/parse-diff";
+import type { CommentThreadsForFile } from "@/lib/use-comment-threads";
 import { cn } from "@/lib/utils";
+
+export interface CommentThreadTarget {
+	id: string;
+	filePath: string;
+}
 
 export interface FileDiffListHandle {
 	scrollToFile: (filePath: string) => void;
 	scrollToLine: (filePath: string, side: DiffSide, line: number) => void;
+	scrollToCommentThread: (thread: CommentThreadTarget) => void;
 	cancelScrollToLine: () => void;
 }
 
@@ -49,6 +58,19 @@ interface FileDiffListProps {
 const FILE_TOP_PADDING = 16;
 const SCROLL_TO_LINE_POLL_MS = 100;
 const SCROLL_TO_LINE_TIMEOUT_MS = 3000;
+const NO_COMMENT_THREADS: CommentThreadsForFile = { fileThreads: [], lineThreads: [] };
+
+function findCommentThreadElement(
+	fileContainer: HTMLElement,
+	threadId: string,
+): HTMLElement | null {
+	const elementId = `comment-thread-${threadId}`;
+	const lightDomElement = fileContainer.ownerDocument.getElementById(elementId);
+	if (lightDomElement) return lightDomElement;
+	const shadowRoot = fileContainer.querySelector("diffs-container")?.shadowRoot;
+	if (!shadowRoot) return null;
+	return shadowRoot.getElementById(elementId);
+}
 
 export const FileDiffList = forwardRef<FileDiffListHandle, FileDiffListProps>(function FileDiffList(
 	{
@@ -84,22 +106,16 @@ export const FileDiffList = forwardRef<FileDiffListHandle, FileDiffListProps>(fu
 
 		const runWithContainer = (
 			fileContainer: HTMLElement,
-			side: DiffSide,
-			line: number,
 			isLatestRequest: () => boolean,
+			findTarget: (container: HTMLElement) => HTMLElement | null,
+			onFound?: (target: HTMLElement) => void,
 		) => {
 			const tryScroll = () => {
 				if (!isLatestRequest()) return true;
-
-				const diffsContainer = fileContainer.querySelector("diffs-container");
-				const shadowRoot = diffsContainer?.shadowRoot;
-				if (!shadowRoot) return false;
-
-				const lineEl = findRenderedDiffLine(shadowRoot, side, line);
-				if (!lineEl) return false;
-				if (lineEl.offsetParent === null) return false;
-
-				lineEl.scrollIntoView({ behavior: "smooth", block: "center" });
+				const target = findTarget(fileContainer);
+				if (!target) return false;
+				target.scrollIntoView({ behavior: "smooth", block: "center" });
+				onFound?.(target);
 				return true;
 			};
 
@@ -161,6 +177,25 @@ export const FileDiffList = forwardRef<FileDiffListHandle, FileDiffListProps>(fu
 			timeoutHandle = setTimeout(disconnectAll, SCROLL_TO_LINE_TIMEOUT_MS);
 		};
 
+		const scrollToTarget = (
+			filePath: string,
+			findTarget: (container: HTMLElement) => HTMLElement | null,
+			onFound?: (target: HTMLElement) => void,
+		) => {
+			cancelPending();
+			if (!entries.some((entry) => entry.file.path === filePath)) return;
+
+			const requestToken = scrollRequestRef.current;
+			const isLatestRequest = () => scrollRequestRef.current === requestToken;
+			if (collapseState.collapsedFiles.has(filePath)) {
+				collapseState.toggleFileCollapsed(filePath);
+			}
+
+			const fileContainer = document.getElementById(`file-${filePath}`);
+			if (!fileContainer) return;
+			runWithContainer(fileContainer, isLatestRequest, findTarget, onFound);
+		};
+
 		return {
 			cancelScrollToLine: cancelPending,
 			scrollToFile(filePath: string) {
@@ -175,19 +210,20 @@ export const FileDiffList = forwardRef<FileDiffListHandle, FileDiffListProps>(fu
 				window.scrollTo({ top });
 			},
 			scrollToLine(filePath: string, side: DiffSide, line: number) {
-				cancelPending();
-				if (!entries.some((e) => e.file.path === filePath)) return;
-
-				const requestToken = scrollRequestRef.current;
-				const isLatestRequest = () => scrollRequestRef.current === requestToken;
-
-				if (collapseState.collapsedFiles.has(filePath)) {
-					collapseState.toggleFileCollapsed(filePath);
-				}
-
-				const fileContainer = document.getElementById(`file-${filePath}`);
-				if (!fileContainer) return;
-				runWithContainer(fileContainer, side, line, isLatestRequest);
+				scrollToTarget(filePath, (fileContainer) => {
+					const shadowRoot = fileContainer.querySelector("diffs-container")?.shadowRoot;
+					if (!shadowRoot) return null;
+					const lineElement = findRenderedDiffLine(shadowRoot, side, line);
+					if (!lineElement || lineElement.offsetParent === null) return null;
+					return lineElement;
+				});
+			},
+			scrollToCommentThread(thread: CommentThreadTarget) {
+				scrollToTarget(
+					thread.filePath,
+					(fileContainer) => findCommentThreadElement(fileContainer, thread.id),
+					(threadElement) => threadElement.focus({ preventScroll: true }),
+				);
 			},
 		};
 	}, [entries, collapseState]);
@@ -236,8 +272,12 @@ function FileDiffSection({
 	chapterOverlay,
 }: FileDiffSectionProps) {
 	const { file, diff } = entry;
+	const { threadsByFile } = useCommentThreadsContext();
 	const isCollapsed = collapseState.collapsedFiles.has(file.path);
 	const [isExpanded, setIsExpanded] = useState(false);
+	const [isComposingFileComment, setIsComposingFileComment] = useState(false);
+	const threads = threadsByFile.get(file.path);
+	const { fileThreads, lineThreads } = threads === undefined ? NO_COMMENT_THREADS : threads;
 
 	const handleToggle = useCallback(
 		() => collapseState.toggleFileCollapsed(file.path),
@@ -251,6 +291,10 @@ function FileDiffSection({
 	const handleToggleViewed = useCallback(() => {
 		onToggleViewed?.(file.path);
 	}, [onToggleViewed, file.path]);
+	const handleStartFileComment = useCallback(() => {
+		if (isCollapsed) collapseState.toggleFileCollapsed(file.path);
+		setIsComposingFileComment(true);
+	}, [collapseState, file.path, isCollapsed]);
 
 	return (
 		<div
@@ -266,21 +310,32 @@ function FileDiffSection({
 				onToggle={handleToggle}
 				onToggleAll={handleToggleAll}
 				onToggleExpand={handleToggleExpand}
+				onComment={handleStartFileComment}
 				onToggleViewed={onToggleViewed ? handleToggleViewed : undefined}
 			/>
 			{!isCollapsed && (
-				<PierreDiffViewer
-					fileDiff={diff}
-					filePath={file.path}
-					expandUnchanged={isExpanded}
-					allLineRefsByFile={chapterOverlay?.allLineRefsByFile}
-					focusedLineRefsByFile={chapterOverlay?.focusedLineRefsByFile}
-					focusedKeyChangeId={chapterOverlay?.focusedKeyChangeId ?? null}
-					isKeyChangeChecked={chapterOverlay?.isKeyChangeChecked}
-					onMarkKeyChangeChecked={chapterOverlay?.onMarkKeyChangeChecked}
-					onUnmarkKeyChangeChecked={chapterOverlay?.onUnmarkKeyChangeChecked}
-					onFocusKeyChange={chapterOverlay?.onFocusKeyChange}
-				/>
+				<>
+					<FileComments
+						filePath={file.path}
+						threads={fileThreads}
+						isComposing={isComposingFileComment}
+						onCancel={() => setIsComposingFileComment(false)}
+						onCreated={() => setIsComposingFileComment(false)}
+					/>
+					<PierreDiffViewer
+						fileDiff={diff}
+						filePath={file.path}
+						lineThreads={lineThreads}
+						expandUnchanged={isExpanded}
+						allLineRefsByFile={chapterOverlay?.allLineRefsByFile}
+						focusedLineRefsByFile={chapterOverlay?.focusedLineRefsByFile}
+						focusedKeyChangeId={chapterOverlay?.focusedKeyChangeId ?? null}
+						isKeyChangeChecked={chapterOverlay?.isKeyChangeChecked}
+						onMarkKeyChangeChecked={chapterOverlay?.onMarkKeyChangeChecked}
+						onUnmarkKeyChangeChecked={chapterOverlay?.onUnmarkKeyChangeChecked}
+						onFocusKeyChange={chapterOverlay?.onFocusKeyChange}
+					/>
+				</>
 			)}
 		</div>
 	);

@@ -1,7 +1,5 @@
-import { ExternalLink } from "lucide-react";
-import { ThemeToggle } from "@/components/layout/theme-toggle";
-import { Button } from "@/components/ui/button";
 import { useChapters } from "@/lib/use-chapters";
+import { DisplaySettingsButton } from "./display-settings-button";
 
 export function Topbar({ runId }: { runId: string | null }) {
 	const { data } = useChapters(runId);
@@ -12,15 +10,7 @@ export function Topbar({ runId }: { runId: string | null }) {
 			<div className="flex min-w-0 items-center gap-2 text-sm">
 				{repoName && <span className="truncate font-medium text-foreground">{repoName}</span>}
 			</div>
-			<div className="flex shrink-0 items-center gap-2">
-				<Button asChild variant="outline" size="sm">
-					<a href="https://stagereview.app" target="_blank" rel="noopener noreferrer">
-						Try the full Stage experience
-						<ExternalLink />
-					</a>
-				</Button>
-				<ThemeToggle />
-			</div>
+			<DisplaySettingsButton />
 		</header>
 	);
 }
