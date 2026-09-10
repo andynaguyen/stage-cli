@@ -24,6 +24,9 @@ export default defineConfig({
 		react(),
 		tailwindcss(),
 	],
+	worker: {
+		format: "es",
+	},
 	build: {
 		outDir: path.resolve(__dirname, "../cli/web-dist"),
 		emptyOutDir: true,

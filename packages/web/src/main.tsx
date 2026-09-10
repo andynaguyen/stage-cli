@@ -2,6 +2,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { DiffWorkerProvider } from "./lib/diff-worker-provider";
 import { ThemeProvider } from "./lib/theme";
 import { DiffSettingsProvider } from "./lib/use-diff-settings";
 import { queryClient, router } from "./router";
@@ -17,7 +18,9 @@ createRoot(rootElement).render(
 		<ThemeProvider>
 			<QueryClientProvider client={queryClient}>
 				<DiffSettingsProvider>
-					<RouterProvider router={router} />
+					<DiffWorkerProvider>
+						<RouterProvider router={router} />
+					</DiffWorkerProvider>
 				</DiffSettingsProvider>
 			</QueryClientProvider>
 		</ThemeProvider>
