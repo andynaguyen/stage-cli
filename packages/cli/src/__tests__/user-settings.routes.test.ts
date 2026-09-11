@@ -39,7 +39,11 @@ async function start() {
 async function request(method = "GET", body?: unknown, origin?: string) {
 	return fetch(`http://127.0.0.1:${server.port}/api/user-settings`, {
 		method,
-		headers: { "Content-Type": "application/json", ...(origin ? { Origin: origin } : {}) },
+		headers: {
+			"Content-Type": "application/json",
+			Connection: "close",
+			...(origin ? { Origin: origin } : {}),
+		},
 		...(body === undefined ? {} : { body: JSON.stringify(body) }),
 	});
 }
