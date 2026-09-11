@@ -4,6 +4,7 @@ import open from "open";
 import { createAgentRuntime } from "./agent/index.js";
 import { buildOtherChangesChapter } from "./build-other-changes.js";
 import { closeDb, getDb } from "./db/client.js";
+import { getUserSettingsDbPath } from "./db/path.js";
 import { parseGitDiff } from "./diff-parser.js";
 import { filterFilesForLlm, loadStageIgnore } from "./filter-files.js";
 import { readRepoContext, readRepoRoot } from "./git.js";
@@ -17,6 +18,7 @@ import { pullRequestRoutes } from "./routes/pull-request.js";
 import { pullRequestMutationRoutes } from "./routes/pull-request-mutations.js";
 import { reviewFeedbackRoutes } from "./routes/review-feedback.js";
 import { runRoutes } from "./routes/runs.js";
+import { userSettingsRoutes } from "./routes/user-settings.js";
 import { viewStateRoutes } from "./routes/view-state.js";
 import { viewerRoutes } from "./routes/viewer.js";
 import { insertChaptersFile } from "./runs/import-chapters.js";
@@ -36,6 +38,7 @@ export async function show(jsonPath: string, options: DiffScopeOptions): Promise
 	const db = getDb();
 	const agentRuntime = createAgentRuntime();
 	try {
+		const settingsDb = getDb({ dbPath: getUserSettingsDbPath() });
 		const { chaptersFile, prNumber } = await buildChaptersFile(jsonPath, options);
 		const repo = readRepoContext();
 		const firstChapter = chaptersFile.chapters[0];
@@ -53,6 +56,7 @@ export async function show(jsonPath: string, options: DiffScopeOptions): Promise
 			routes: [
 				...agentRoutes(db, agentRuntime),
 				...runRoutes(db),
+				...userSettingsRoutes(settingsDb),
 				...viewStateRoutes(db),
 				...commentRoutes(db),
 				...reviewFeedbackRoutes(db, runId, feedbackSession),

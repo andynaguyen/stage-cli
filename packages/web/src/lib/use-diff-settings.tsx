@@ -1,26 +1,9 @@
-import { createContext, type ReactNode, useCallback, useContext, useMemo } from "react";
-import { useLocalStorage } from "./use-local-storage";
+import type { DiffIndicators, LineDiffType, ViewMode } from "@stagereview/types/user-settings";
+import { createContext, type ReactNode, useContext, useMemo } from "react";
+import { useUserSettings } from "./user-settings-context";
 
-export const VIEW_MODE = {
-	SPLIT: "split",
-	UNIFIED: "unified",
-} as const;
-export type ViewMode = (typeof VIEW_MODE)[keyof typeof VIEW_MODE];
-
-export const DIFF_INDICATORS = {
-	CLASSIC: "classic",
-	BARS: "bars",
-	NONE: "none",
-} as const;
-export type DiffIndicators = (typeof DIFF_INDICATORS)[keyof typeof DIFF_INDICATORS];
-
-export const LINE_DIFF_TYPE = {
-	WORD_ALT: "word-alt",
-	WORD: "word",
-	CHAR: "char",
-	NONE: "none",
-} as const;
-export type LineDiffType = (typeof LINE_DIFF_TYPE)[keyof typeof LINE_DIFF_TYPE];
+export type { DiffIndicators, LineDiffType, ViewMode } from "@stagereview/types/user-settings";
+export { DIFF_INDICATORS, LINE_DIFF_TYPE, VIEW_MODE } from "@stagereview/types/user-settings";
 
 interface DiffSettingsContextValue {
 	viewMode: ViewMode;
@@ -42,77 +25,22 @@ interface DiffSettingsContextValue {
 const DiffSettingsContext = createContext<DiffSettingsContextValue | null>(null);
 
 export function DiffSettingsProvider({ children }: { children: ReactNode }) {
-	const [viewMode, setViewMode] = useLocalStorage<ViewMode>("diff-viewMode", VIEW_MODE.SPLIT);
-	const [diffIndicators, setDiffIndicators] = useLocalStorage<DiffIndicators>(
-		"diff-indicators",
-		DIFF_INDICATORS.CLASSIC,
-	);
-	const [lineDiffType, setLineDiffType] = useLocalStorage<LineDiffType>(
-		"diff-lineDiffType",
-		LINE_DIFF_TYPE.WORD,
-	);
-	const [backgrounds, setBackgrounds] = useLocalStorage("diff-backgrounds", true);
-	const [wrap, setWrap] = useLocalStorage("diff-wrap", true);
-	const [lineNumbers, setLineNumbers] = useLocalStorage("diff-lineNumbers", true);
-	const [syntaxTheme, setSyntaxTheme] = useLocalStorage("diff-syntaxTheme", "pierre");
-
-	const setViewModeStable = useCallback((mode: ViewMode) => setViewMode(mode), [setViewMode]);
-	const setDiffIndicatorsStable = useCallback(
-		(indicators: DiffIndicators) => setDiffIndicators(indicators),
-		[setDiffIndicators],
-	);
-	const setLineDiffTypeStable = useCallback(
-		(type: LineDiffType) => setLineDiffType(type),
-		[setLineDiffType],
-	);
-	const setBackgroundsStable = useCallback(
-		(enabled: boolean) => setBackgrounds(enabled),
-		[setBackgrounds],
-	);
-	const setWrapStable = useCallback((next: boolean) => setWrap(next), [setWrap]);
-	const setLineNumbersStable = useCallback(
-		(enabled: boolean) => setLineNumbers(enabled),
-		[setLineNumbers],
-	);
-	const setSyntaxThemeStable = useCallback(
-		(theme: string) => setSyntaxTheme(theme),
-		[setSyntaxTheme],
-	);
-
-	const value: DiffSettingsContextValue = useMemo(
+	const { settings, updateSettings } = useUserSettings();
+	const setters = useMemo(
 		() => ({
-			viewMode,
-			setViewMode: setViewModeStable,
-			diffIndicators,
-			setDiffIndicators: setDiffIndicatorsStable,
-			lineDiffType,
-			setLineDiffType: setLineDiffTypeStable,
-			backgrounds,
-			setBackgrounds: setBackgroundsStable,
-			wrap,
-			setWrap: setWrapStable,
-			lineNumbers,
-			setLineNumbers: setLineNumbersStable,
-			syntaxTheme,
-			setSyntaxTheme: setSyntaxThemeStable,
+			setViewMode: (viewMode: ViewMode) => updateSettings({ display: { viewMode } }),
+			setDiffIndicators: (diffIndicators: DiffIndicators) =>
+				updateSettings({ display: { diffIndicators } }),
+			setLineDiffType: (lineDiffType: LineDiffType) =>
+				updateSettings({ display: { lineDiffType } }),
+			setBackgrounds: (backgrounds: boolean) => updateSettings({ display: { backgrounds } }),
+			setWrap: (wrap: boolean) => updateSettings({ display: { wrap } }),
+			setLineNumbers: (lineNumbers: boolean) => updateSettings({ display: { lineNumbers } }),
+			setSyntaxTheme: (syntaxTheme: string) => updateSettings({ display: { syntaxTheme } }),
 		}),
-		[
-			viewMode,
-			setViewModeStable,
-			diffIndicators,
-			setDiffIndicatorsStable,
-			lineDiffType,
-			setLineDiffTypeStable,
-			backgrounds,
-			setBackgroundsStable,
-			wrap,
-			setWrapStable,
-			lineNumbers,
-			setLineNumbersStable,
-			syntaxTheme,
-			setSyntaxThemeStable,
-		],
+		[updateSettings],
 	);
+	const value = useMemo(() => ({ ...settings.display, ...setters }), [settings.display, setters]);
 
 	return <DiffSettingsContext.Provider value={value}>{children}</DiffSettingsContext.Provider>;
 }

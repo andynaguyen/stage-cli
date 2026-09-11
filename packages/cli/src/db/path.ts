@@ -13,6 +13,12 @@ export function getDbPath(): string {
 	return path.join(dir, DB_FILE);
 }
 
+export function getUserSettingsDbPath(): string {
+	const dir = path.join(homedir(), STAGE_HOME);
+	mkdirSync(dir, { recursive: true });
+	return path.join(dir, "user-settings.sqlite");
+}
+
 function ensureRepoDir(repoRoot: string): string {
 	const hash = createHash("sha256").update(repoRoot.trim()).digest("hex").slice(0, REPO_HASH_LEN);
 	const dir = path.join(homedir(), STAGE_HOME, hash);

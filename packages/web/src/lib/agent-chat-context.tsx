@@ -28,6 +28,7 @@ import {
 } from "./agent-chat-message";
 import { AgentSessionController } from "./agent-session-controller";
 import { useAgentCapability } from "./use-agent-capability";
+import { useUserSettings } from "./user-settings-context";
 
 interface AskAgentPanelContextValue {
 	isOpen: boolean;
@@ -90,6 +91,22 @@ interface AgentModelConfiguration {
 	serviceTier: string | null;
 }
 
+function supportedConfiguration(
+	model: AgentModel,
+	configuration: AgentModelConfiguration,
+): AgentModelConfiguration {
+	return {
+		reasoningEffort: model.reasoningEfforts.some(
+			(effort) => effort.id === configuration.reasoningEffort,
+		)
+			? configuration.reasoningEffort
+			: null,
+		serviceTier: model.serviceTiers.some((tier) => tier.id === configuration.serviceTier)
+			? configuration.serviceTier
+			: null,
+	};
+}
+
 interface AskAgentProviderProps {
 	runId: string;
 	fileNavigation: AskAgentFileNavigation;
@@ -103,6 +120,8 @@ export function AskAgentProvider({
 	providerId = AGENT_PROVIDER.CODEX,
 	children,
 }: AskAgentProviderProps) {
+	const { settings, updateSettings } = useUserSettings();
+	const savedAgent = settings.agent?.providerId === providerId ? settings.agent : null;
 	const [isOpen, setIsOpen] = useState(false);
 	const {
 		capability,
@@ -113,10 +132,17 @@ export function AskAgentProvider({
 	const [pendingSelection, setPendingSelection] = useState<AgentSelection | null>(null);
 	const [pendingPermissions, setPendingPermissions] = useState<AgentPendingPermission[]>([]);
 	const [isStreaming, setIsStreaming] = useState(false);
-	const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
-	const [configurationByModel, setConfigurationByModel] = useState<
-		Map<string, AgentModelConfiguration>
-	>(() => new Map());
+	const selectedModelId = savedAgent?.model ?? null;
+	const [configurationByModel, setConfigurationByModel] = useState(() => {
+		const configurations = new Map<string, AgentModelConfiguration>();
+		if (savedAgent) {
+			configurations.set(savedAgent.model, {
+				reasoningEffort: savedAgent.reasoningEffort,
+				serviceTier: savedAgent.serviceTier,
+			});
+		}
+		return configurations;
+	});
 	const composerElementRef = useRef<HTMLTextAreaElement | null>(null);
 	const shouldFocusComposerRef = useRef(false);
 	const sessionController = useMemo(() => new AgentSessionController(runId), [runId]);
@@ -126,9 +152,14 @@ export function AskAgentProvider({
 		if (selected) return selected;
 		return models.find((model) => model.isDefault) ?? models[0] ?? null;
 	}, [models, selectedModelId]);
-	const selectedConfiguration = selectedModel
-		? (configurationByModel.get(selectedModel.id) ?? DEFAULT_MODEL_CONFIGURATION)
-		: DEFAULT_MODEL_CONFIGURATION;
+	const selectedConfiguration = useMemo(() => {
+		if (!selectedModel) return DEFAULT_MODEL_CONFIGURATION;
+		const configuration =
+			savedAgent?.model === selectedModel.id
+				? savedAgent
+				: (configurationByModel.get(selectedModel.id) ?? DEFAULT_MODEL_CONFIGURATION);
+		return supportedConfiguration(selectedModel, configuration);
+	}, [configurationByModel, savedAgent, selectedModel]);
 	const { reasoningEffort, serviceTier } = selectedConfiguration;
 
 	useEffect(() => () => sessionController.dispose(), [sessionController]);
@@ -222,6 +253,16 @@ export function AskAgentProvider({
 				},
 			});
 			if (!stream) return;
+			if (
+				selectedModel &&
+				(savedAgent?.model !== selectedModel.id ||
+					savedAgent.reasoningEffort !== reasoningEffort ||
+					savedAgent.serviceTier !== serviceTier)
+			) {
+				updateSettings({
+					agent: { providerId, model: selectedModel.id, reasoningEffort, serviceTier },
+				});
+			}
 			const userMessage = newAgentMessage(
 				"user",
 				trimmedQuestion,
@@ -253,7 +294,16 @@ export function AskAgentProvider({
 				if (!sessionController.isStreaming) setPendingPermissions([]);
 			}
 		},
-		[pendingSelection, providerId, reasoningEffort, selectedModel, serviceTier, sessionController],
+		[
+			pendingSelection,
+			providerId,
+			reasoningEffort,
+			savedAgent,
+			selectedModel,
+			serviceTier,
+			sessionController,
+			updateSettings,
+		],
 	);
 
 	const stop = useCallback(() => {
@@ -281,15 +331,27 @@ export function AskAgentProvider({
 	const selectModel = useCallback(
 		(modelId: string) => {
 			if (selectedModel?.id === modelId) return;
+			const model = models.find((candidate) => candidate.id === modelId);
+			if (!model) return;
 			reset();
-			setSelectedModelId(modelId);
+			updateSettings({
+				agent: {
+					providerId,
+					model: modelId,
+					...supportedConfiguration(
+						model,
+						configurationByModel.get(modelId) ?? DEFAULT_MODEL_CONFIGURATION,
+					),
+				},
+			});
 		},
-		[reset, selectedModel],
+		[configurationByModel, models, providerId, reset, selectedModel, updateSettings],
 	);
 
 	const updateModelConfiguration = useCallback(
 		(modelId: string, configuration: AgentModelConfiguration) => {
 			reset();
+			updateSettings({ agent: { providerId, model: modelId, ...configuration } });
 			setConfigurationByModel((current) => {
 				const next = new Map(current);
 				if (configuration.reasoningEffort === null && configuration.serviceTier === null) {
@@ -300,29 +362,29 @@ export function AskAgentProvider({
 				return next;
 			});
 		},
-		[reset],
+		[providerId, reset, updateSettings],
 	);
 
 	const selectReasoningEffort = useCallback(
 		(effort: string | null) => {
 			if (!selectedModel || reasoningEffort === effort) return;
 			updateModelConfiguration(selectedModel.id, {
-				...selectedConfiguration,
 				reasoningEffort: effort,
+				serviceTier,
 			});
 		},
-		[reasoningEffort, selectedConfiguration, selectedModel, updateModelConfiguration],
+		[reasoningEffort, serviceTier, selectedModel, updateModelConfiguration],
 	);
 
 	const selectServiceTier = useCallback(
 		(tier: string | null) => {
 			if (!selectedModel || serviceTier === tier) return;
 			updateModelConfiguration(selectedModel.id, {
-				...selectedConfiguration,
+				reasoningEffort,
 				serviceTier: tier,
 			});
 		},
-		[selectedConfiguration, selectedModel, serviceTier, updateModelConfiguration],
+		[reasoningEffort, selectedModel, serviceTier, updateModelConfiguration],
 	);
 
 	const respondToPermission = useCallback(

@@ -12,15 +12,14 @@ export type StageDb = BetterSQLite3Database<typeof schema>;
 interface CachedHandle {
 	sqlite: Database.Database;
 	drizzle: StageDb;
-	path: string;
 }
 
-let cached: CachedHandle | null = null;
+const handles = new Map<string, CachedHandle>();
 
 export function getDb(opts: { dbPath?: string } = {}): StageDb {
 	const dbPath = opts.dbPath ?? getDbPath();
-	if (cached && cached.path === dbPath) return cached.drizzle;
-	if (cached) closeDb();
+	const cached = handles.get(dbPath);
+	if (cached) return cached.drizzle;
 
 	const sqlite = new Database(dbPath);
 	sqlite.pragma("journal_mode = WAL");
@@ -29,14 +28,13 @@ export function getDb(opts: { dbPath?: string } = {}): StageDb {
 	const db = drizzle(sqlite, { schema });
 	migrate(db, { migrationsFolder: findMigrationsFolder() });
 
-	cached = { sqlite, drizzle: db, path: dbPath };
+	handles.set(dbPath, { sqlite, drizzle: db });
 	return db;
 }
 
 export function closeDb(): void {
-	if (!cached) return;
-	cached.sqlite.close();
-	cached = null;
+	for (const handle of handles.values()) handle.sqlite.close();
+	handles.clear();
 }
 
 // Module depth differs between dev (src/db/client.ts) and prod (bundled dist/index.js),
